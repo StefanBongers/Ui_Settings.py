@@ -1,0 +1,659 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>DialogRingserienEingabe</class>
+ <widget class="QDialog" name="DialogRingserienEingabe">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1035</width>
+    <height>694</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>DialogRingserienEingabe</string>
+  </property>
+  <layout class="QGridLayout" name="gridLayout">
+   <item row="5" column="0" colspan="7">
+    <widget class="QGroupBox" name="groupBox_zusatzeingabe">
+     <property name="enabled">
+      <bool>false</bool>
+     </property>
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>800</width>
+       <height>200</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>300</height>
+      </size>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>14</pointsize>
+      </font>
+     </property>
+     <property name="title">
+      <string>Zusätzliche Daten für neue Ringserie:</string>
+     </property>
+     <widget class="QLabel" name="label_8">
+      <property name="geometry">
+       <rect>
+        <x>20</x>
+        <y>30</y>
+        <width>91</width>
+        <height>35</height>
+       </rect>
+      </property>
+      <property name="toolTip">
+       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:700;&quot;&gt;Start&lt;/span&gt;nummer der &lt;span style=&quot; font-weight:700;&quot;&gt;gesamten&lt;/span&gt; Serie! Wurden z.B. 1000 Ringe einer Serie geliefert von XX010001 bis XX011000 in 10 Schnureinheiten (Paketen), so trägt man die erste Nummer (10.001) bei Startnummer ein und die letzte Nummer (11.000) bei Endnummer. Natürlich ohne .&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      </property>
+      <property name="text">
+       <string>Ringserie:</string>
+      </property>
+     </widget>
+     <widget class="QLineEdit" name="INP_neueSerie_ringserie">
+      <property name="geometry">
+       <rect>
+        <x>130</x>
+        <y>30</y>
+        <width>71</width>
+        <height>35</height>
+       </rect>
+      </property>
+      <property name="maxLength">
+       <number>2</number>
+      </property>
+     </widget>
+     <widget class="QComboBox" name="CMB_neueSerie_ringtyp_auswahl">
+      <property name="geometry">
+       <rect>
+        <x>280</x>
+        <y>30</y>
+        <width>81</width>
+        <height>35</height>
+       </rect>
+      </property>
+      <property name="editable">
+       <bool>false</bool>
+      </property>
+      <property name="insertPolicy">
+       <enum>QComboBox::NoInsert</enum>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_7">
+      <property name="geometry">
+       <rect>
+        <x>210</x>
+        <y>30</y>
+        <width>71</width>
+        <height>35</height>
+       </rect>
+      </property>
+      <property name="toolTip">
+       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:700;&quot;&gt;Start&lt;/span&gt;nummer der &lt;span style=&quot; font-weight:700;&quot;&gt;gesamten&lt;/span&gt; Serie! Wurden z.B. 1000 Ringe einer Serie geliefert von XX010001 bis XX011000 in 10 Schnureinheiten (Paketen), so trägt man die erste Nummer (10.001) bei Startnummer ein und die letzte Nummer (11.000) bei Endnummer. Natürlich ohne .&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      </property>
+      <property name="text">
+       <string>Ringtyp: </string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="BTN_ringtypenliste">
+      <property name="geometry">
+       <rect>
+        <x>360</x>
+        <y>30</y>
+        <width>171</width>
+        <height>35</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Liste Ringtypen</string>
+      </property>
+     </widget>
+     <widget class="QTableWidget" name="TBL_ringtypen">
+      <property name="geometry">
+       <rect>
+        <x>20</x>
+        <y>70</y>
+        <width>961</width>
+        <height>111</height>
+       </rect>
+      </property>
+      <property name="sizeAdjustPolicy">
+       <enum>QAbstractScrollArea::AdjustToContents</enum>
+      </property>
+      <column>
+       <property name="text">
+        <string>Klasse</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>Material</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>Durchmesser</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>Höhe</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>Stärke</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>Farbe</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>Bemerkung</string>
+       </property>
+      </column>
+     </widget>
+    </widget>
+   </item>
+   <item row="2" column="6">
+    <widget class="QPushButton" name="BTN_spezial">
+     <property name="enabled">
+      <bool>false</bool>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>14</pointsize>
+      </font>
+     </property>
+     <property name="toolTip">
+      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Möchte man ein Paket oder eine Schnur 'dazwischenschieben' oder als nächstes behandeln, so kann man dieses Paket hier auswählen und markieren als das nächste zu verwendende - UNABHÄNGIG von der aktuell definierten Reihenfolge. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+     </property>
+     <property name="text">
+      <string>Änderungen speichern</string>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="3">
+    <widget class="QLineEdit" name="INP_end_ringnummer_neue_serie">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>50</width>
+       <height>0</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>16777215</height>
+      </size>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>14</pointsize>
+      </font>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="2">
+    <widget class="QPushButton" name="BTN_info">
+     <property name="font">
+      <font>
+       <pointsize>14</pointsize>
+      </font>
+     </property>
+     <property name="text">
+      <string>Info zu Ringmengen</string>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="0">
+    <layout class="QHBoxLayout" name="horizontalLayout_2">
+     <item>
+      <widget class="QLabel" name="label">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Maximum" vsizetype="Maximum">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>16777215</width>
+         <height>25</height>
+        </size>
+       </property>
+       <property name="font">
+        <font>
+         <pointsize>14</pointsize>
+        </font>
+       </property>
+       <property name="text">
+        <string>Ringserie:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="CMB_ringserienauswahl">
+       <property name="font">
+        <font>
+         <pointsize>14</pointsize>
+        </font>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item row="4" column="2">
+    <widget class="QLabel" name="label_4">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>80</width>
+       <height>0</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>16777215</height>
+      </size>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>14</pointsize>
+      </font>
+     </property>
+     <property name="toolTip">
+      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:700;&quot;&gt;End&lt;/span&gt;nummer der &lt;span style=&quot; font-weight:700;&quot;&gt;gesamten&lt;/span&gt; Serie! Wurden z.B. 1000 Ringe einer Serie geliefert von XX010001 bis XX011000 in 10 Schnureinheiten (Paketen), so trägt man die erste Nummer (10.001) bei Startnummer ein und die letzte Nummer (11.000) bei Endnummer. Natürlich ohne .&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+     </property>
+     <property name="text">
+      <string>Endnummer:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="1">
+    <widget class="QPushButton" name="BTN_beispiel_eingabe_ringserie">
+     <property name="font">
+      <font>
+       <pointsize>14</pointsize>
+      </font>
+     </property>
+     <property name="text">
+      <string>Beispiel</string>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="6">
+    <widget class="QPushButton" name="BTN_neue_ringserie">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>14</pointsize>
+      </font>
+     </property>
+     <property name="text">
+      <string>Anlegen</string>
+     </property>
+    </widget>
+   </item>
+   <item row="3" column="1">
+    <widget class="QLineEdit" name="INP_anz_ring_schnur">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>50</width>
+       <height>0</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>16777215</height>
+      </size>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>14</pointsize>
+      </font>
+     </property>
+     <property name="text">
+      <string>100</string>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="0" colspan="7">
+    <widget class="OwnTable" name="TBL_ringserien">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>900</width>
+       <height>0</height>
+      </size>
+     </property>
+     <property name="sizeAdjustPolicy">
+      <enum>QAbstractScrollArea::AdjustToContents</enum>
+     </property>
+     <property name="editTriggers">
+      <set>QAbstractItemView::SelectedClicked</set>
+     </property>
+     <property name="alternatingRowColors">
+      <bool>false</bool>
+     </property>
+     <property name="showGrid">
+      <bool>true</bool>
+     </property>
+     <property name="sortingEnabled">
+      <bool>true</bool>
+     </property>
+     <column>
+      <property name="text">
+       <string>Ringserie</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Ringtyp</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Startnummer</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Endnummer</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Paketnummer
+Reihenfolge</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>letzte vergebene
+Ringnummer</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Status</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Bemerkung</string>
+      </property>
+     </column>
+    </widget>
+   </item>
+   <item row="3" column="6">
+    <widget class="QLineEdit" name="INP_zusatz">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>30</width>
+       <height>0</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>30</width>
+       <height>16777215</height>
+      </size>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>14</pointsize>
+      </font>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="0">
+    <widget class="QPushButton" name="BTN_neueSerie_anlegen">
+     <property name="font">
+      <font>
+       <pointsize>14</pointsize>
+      </font>
+     </property>
+     <property name="toolTip">
+      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Dies bedeutet, dass die Ringserie, die Du eingeben möchtest, bisher noch &lt;span style=&quot; font-size:10pt; font-weight:700; color:#ff0000;&quot;&gt;nicht&lt;/span&gt; auf der Station verwendet wurde. Wenn Du nur einen neuen Nummernbereich eingeben möchtest, wähle bitte die bisherige Ringserie links aus und nutze die untere Eingabemaske für das Hinzufügen neuer Nummern.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+     </property>
+     <property name="text">
+      <string>Neue Ringserie anlegen ...</string>
+     </property>
+    </widget>
+   </item>
+   <item row="3" column="5">
+    <widget class="QLabel" name="label_6">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>80</width>
+       <height>0</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>16777215</height>
+      </size>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>14</pointsize>
+      </font>
+     </property>
+     <property name="toolTip">
+      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Es gibt (leider) einige Ringe, die keine numerischen Ringnummern haben, sondern zusätzlich noch ein Buchstabe. Z.B. die Serie 39 besteht aus 391F, 392F, 393F, ..., 399F. Um aber intern mit Zahlen rechnen zu können statt mit alphanumerischen Operationen (Texte umwandeln, aufsplitten, wieder zurückwandeln, ...) wurden für die 0,00001% der Fälle dieses Zusatzfeld ins Leben gerufen. Beinhaltet also der hintere Teil der Ringnummer (nach der Serie) einen nicht-numerischen Teil, wird dieser hier bei Zusatz eingetragen.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+     </property>
+     <property name="text">
+      <string>Zusatz:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="3" column="0">
+    <widget class="QLabel" name="label_5">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>220</width>
+       <height>0</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>16777215</height>
+      </size>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>14</pointsize>
+      </font>
+     </property>
+     <property name="toolTip">
+      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Es wird die Anzahl je &amp;quot;Paket&amp;quot; benötigt. Die meisten Ringe sind auf einer Gummischnur aufgezogen. Am Beringertisch befindet sich meistens eine Schnur je Ringtyp/-serie. Die Serie lässt sich also in diese Pakete vereinzeln. Manche Ringe sind z.B. so groß, dass nur 10 Exemplare auf einem Schlauch aufgezogen sind. Dann ist hier 10 einzutragen. Die Standardpaketgröße beträgt 100 (Ringe je Schnur)&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+     </property>
+     <property name="text">
+      <string>Anzahl Ringe pro 'Schnur':</string>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="6">
+    <widget class="QPushButton" name="BTN_close">
+     <property name="font">
+      <font>
+       <pointsize>14</pointsize>
+      </font>
+     </property>
+     <property name="text">
+      <string>Schließen</string>
+     </property>
+    </widget>
+   </item>
+   <item row="3" column="3">
+    <widget class="QLineEdit" name="INP_start_ringnummer_neue_serie">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>50</width>
+       <height>0</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>16777215</height>
+      </size>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>14</pointsize>
+      </font>
+     </property>
+     <property name="maxLength">
+      <number>8</number>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="1">
+    <widget class="QPushButton" name="BTN_clear">
+     <property name="font">
+      <font>
+       <pointsize>14</pointsize>
+      </font>
+     </property>
+     <property name="text">
+      <string>Clear</string>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="0">
+    <widget class="QLabel" name="label_2">
+     <property name="font">
+      <font>
+       <pointsize>14</pointsize>
+      </font>
+     </property>
+     <property name="toolTip">
+      <string>Automatisch Aufteilung der Pakete nach Anzahl Ringe pro Schnur</string>
+     </property>
+     <property name="text">
+      <string>Neue Pakete hinzufügen... </string>
+     </property>
+    </widget>
+   </item>
+   <item row="3" column="2">
+    <widget class="QLabel" name="label_3">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>120</width>
+       <height>0</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>16777215</height>
+      </size>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>14</pointsize>
+      </font>
+     </property>
+     <property name="toolTip">
+      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:700;&quot;&gt;Start&lt;/span&gt;nummer der &lt;span style=&quot; font-weight:700;&quot;&gt;gesamten&lt;/span&gt; Serie! Wurden z.B. 1000 Ringe einer Serie geliefert von XX010001 bis XX011000 in 10 Schnureinheiten (Paketen), so trägt man die erste Nummer (10.001) bei Startnummer ein und die letzte Nummer (11.000) bei Endnummer. Natürlich ohne .&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+     </property>
+     <property name="text">
+      <string>Startnummer: </string>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>OwnTable</class>
+   <extends>QTableWidget</extends>
+   <header>rberi_lib</header>
+  </customwidget>
+ </customwidgets>
+ <tabstops>
+  <tabstop>INP_neueSerie_ringserie</tabstop>
+  <tabstop>CMB_neueSerie_ringtyp_auswahl</tabstop>
+  <tabstop>BTN_ringtypenliste</tabstop>
+  <tabstop>TBL_ringtypen</tabstop>
+ </tabstops>
+ <resources/>
+ <connections/>
+</ui>

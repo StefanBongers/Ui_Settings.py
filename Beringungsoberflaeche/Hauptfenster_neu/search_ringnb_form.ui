@@ -1,0 +1,546 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Form</class>
+ <widget class="QWidget" name="Form">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1452</width>
+    <height>632</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Einzeleintrag nach Ringnummer</string>
+  </property>
+  <property name="layoutDirection">
+   <enum>Qt::LeftToRight</enum>
+  </property>
+  <layout class="QGridLayout" name="gridLayout">
+   <item row="0" column="0">
+    <layout class="QGridLayout" name="gridLayout_2">
+     <item row="1" column="2">
+      <widget class="QLabel" name="label_3">
+       <property name="toolTip">
+        <string>Rechtsklick fügt aktuelles Datum ein.</string>
+       </property>
+       <property name="text">
+        <string>Startdatum:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="3">
+      <widget class="QDateEdit" name="DE_end">
+       <property name="minimumSize">
+        <size>
+         <width>150</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>150</width>
+         <height>16777215</height>
+        </size>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="3">
+      <widget class="QLabel" name="label_5">
+       <property name="toolTip">
+        <string>Rechtsklick fügt aktuelles Datum ein.</string>
+       </property>
+       <property name="text">
+        <string>Enddatum:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="6">
+      <widget class="QPushButton" name="BTN_fehlerliste_wiederfang">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>200</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>Wiederfangfehlerliste</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="0">
+      <widget class="QLabel" name="label">
+       <property name="text">
+        <string>Ringnummer:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="2">
+      <widget class="QDateEdit" name="DE_start">
+       <property name="minimumSize">
+        <size>
+         <width>150</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>100</width>
+         <height>16777215</height>
+        </size>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="1">
+      <widget class="QComboBox" name="CMB_art">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="minimumSize">
+        <size>
+         <width>250</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>250</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="editable">
+        <bool>true</bool>
+       </property>
+       <property name="insertPolicy">
+        <enum>QComboBox::NoInsert</enum>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="3">
+      <widget class="QPushButton" name="BTN_search">
+       <property name="maximumSize">
+        <size>
+         <width>200</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>Suchen</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="5">
+      <widget class="QPushButton" name="BTN_fehlerliste">
+       <property name="minimumSize">
+        <size>
+         <width>100</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>200</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>Toleranzfehlerliste</string>
+       </property>
+      </widget>
+     </item>
+     <item row="4" column="0" colspan="7">
+      <widget class="QTableWidget" name="TBL_results">
+       <property name="sizeAdjustPolicy">
+        <enum>QAbstractScrollArea::AdjustToContents</enum>
+       </property>
+       <property name="sortingEnabled">
+        <bool>true</bool>
+       </property>
+       <column>
+        <property name="text">
+         <string>Ringnummer</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Art</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Fangart</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Datum</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Uhrzeit</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Beringer</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Netz</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Netzfach</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Fett</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Muskel</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Alter</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Geschlecht</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Kleingefiedermauser</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Mauserfortschritt</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Handschwingenmauser</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Teilfederlänge</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Flügellänge</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Masse</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Innenkerbe H2</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Verletzungscode</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Bemerkung</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Station</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Zentrale</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>HS2</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>HS4</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>HS5</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>HS6</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>HS7</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>HS8</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>HS9</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>HS10</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>AS1</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Tarsus</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Schnabellänge</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Schnabelbreite</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Innenfußspanne</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Mauserkarte</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>ESF_ID</string>
+        </property>
+       </column>
+      </widget>
+     </item>
+     <item row="1" column="4">
+      <widget class="QCheckBox" name="CHB_rel_col">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="minimumSize">
+        <size>
+         <width>250</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>250</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>nur relevante Spalten</string>
+       </property>
+       <property name="checked">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="1">
+      <widget class="QLabel" name="label_2">
+       <property name="text">
+        <string>Art:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="0">
+      <widget class="QLineEdit" name="INP_ringnb">
+       <property name="minimumSize">
+        <size>
+         <width>150</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>150</width>
+         <height>16777215</height>
+        </size>
+       </property>
+      </widget>
+     </item>
+     <item row="5" column="2">
+      <widget class="QPushButton" name="BTN_save">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="minimumSize">
+        <size>
+         <width>140</width>
+         <height>50</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>150</width>
+         <height>50</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>Speichern</string>
+       </property>
+      </widget>
+     </item>
+     <item row="5" column="3">
+      <widget class="QPushButton" name="BTN_cancel">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="minimumSize">
+        <size>
+         <width>150</width>
+         <height>50</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>150</width>
+         <height>50</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>Schließen/Abb.</string>
+       </property>
+      </widget>
+     </item>
+     <item row="5" column="5">
+      <widget class="QPushButton" name="BTN_export">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="minimumSize">
+        <size>
+         <width>150</width>
+         <height>50</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>150</width>
+         <height>50</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>Export (*.csv)</string>
+       </property>
+      </widget>
+     </item>
+     <item row="5" column="6">
+      <widget class="QPushButton" name="BTN_import">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="minimumSize">
+        <size>
+         <width>150</width>
+         <height>50</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>150</width>
+         <height>50</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>Import (*.csv)</string>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="4">
+      <widget class="QLabel" name="LBL_progress">
+       <property name="maximumSize">
+        <size>
+         <width>200</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>Fortschritt: </string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="5" colspan="2">
+      <widget class="QProgressBar" name="progressBar">
+       <property name="maximum">
+        <number>1000</number>
+       </property>
+       <property name="value">
+        <number>0</number>
+       </property>
+       <property name="textVisible">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
