@@ -4,8 +4,9 @@ import datetime
 import mariadb
 import numpy as np
 import pandas as pd
+from PyQt5 import QtWidgets
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (QDialog, QMessageBox, QTableWidgetItem, QTableWidget, QGridLayout, QPushButton, )
+from PyQt5.QtWidgets import (QDialog, QMessageBox, QTableWidgetItem, QTableWidget, QGridLayout, QPushButton, QHeaderView, )
 from mariadb import Connection
 
 import rberi_lib
@@ -407,6 +408,8 @@ class _RingSerienVerwaltung(QDialog):
         self.flag_neue_serie = False
         self.ui = Ui_DialogRingserienEingabe()
         self.ui.setupUi(self)
+        self.ui.TBL_ringserien.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
+
         self._engine = engine
         self.bd = constants()
         self.ui.groupBox_zusatzeingabe.setVisible(True)

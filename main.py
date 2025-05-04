@@ -5663,7 +5663,6 @@ class MainWindow(QtWidgets.QMainWindow):
                                                  'diese Altersbestimmung nicht anhand des Gefieders möglich. Daher wird '
                                                  'dringend empfohlen, das Alter auf 4 zu setzen. Alter ändern?',
                                            'Altersbestimmung', qss=bd.get_qss()).exec_()
-                print("Test")
                 if a == QMessageBox.Yes:
                     self.ui.CMB_alter.setCurrentText('4')
                     self.ui.CMB_sex.setFocus(True)
