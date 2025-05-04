@@ -5972,6 +5972,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.INP_teilfeder.setText("")
         self.ui.INP_innenfuss.setText("")
         self.ui.PTE_bemerkung.clear()
+        self.ui.CHB_bruffleck.setChecked(False)
         # self.ui.PTE_bemerkung.setEnabled(False)
         self.ui.TBL_wiederfaenge.setRowCount(0)
         # self.ui.LBL_bild.clear()
