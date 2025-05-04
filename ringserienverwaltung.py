@@ -457,7 +457,7 @@ class _RingSerienVerwaltung(QDialog):
                 sql_query_text += "SUBSTRING(ringnummer, 1, 2) = '" + val['ringserie'] + "'"
             else:
                 sql_query_text += " OR SUBSTRING(ringnummer, 1, 2) = '" + val['ringserie'] + "'"
-        sql_query_text += ")"
+        sql_query_text += ") and fangart = 'e'"
         print(sql_query_text)
         try:
             df_esf = pd.read_sql(sql_query_text, self.get_engine())
@@ -474,7 +474,7 @@ class _RingSerienVerwaltung(QDialog):
         if (datetime.date(datetime.date.today().year, 6, 30) <= datetime.date.today() <=
                 datetime.date(datetime.date.today().year, 11, 7)):
             rest_tage_bis_saisonende = datetime.date(datetime.date.today().year,  11, 7) - datetime.date.today()
-        if verbleibende_Tage <= rest_tage_bis_saisonende.days:
+        if verbleibende_Tage <= rest_tage_bis_saisonende:
             return datetime.date.today() + datetime.timedelta(days=verbleibende_Tage)
         else:
             if datetime.date(datetime.date.today().year, 6, 30) <= datetime.date.today():       # nach 07.11.
@@ -489,10 +489,10 @@ class _RingSerienVerwaltung(QDialog):
             return forecast_datum
 
     def info(self):
-        info_diag = QDialog(self)
-        info_diag.setWindowTitle("Info über vorhandene Ringserien")
-        info_diag.resize(1024, 800)
-        info_diag.layout = QGridLayout(info_diag)
+        self.info_diag = QDialog(self)
+        self.info_diag.setWindowTitle("Info über vorhandene Ringserien")
+        self.info_diag.resize(1024, 800)
+        self.info_diag.layout = QGridLayout(self.info_diag)
         tbl = QTableWidget()
         tbl.setColumnCount(5)
 
@@ -506,7 +506,6 @@ class _RingSerienVerwaltung(QDialog):
         tbl.setHorizontalHeaderItem(3, item)
         item = QTableWidgetItem("reicht bis")
         tbl.setHorizontalHeaderItem(4, item)
-
         try:
             df_ringtyp = pd.read_sql("SELECT ringtypID, klasse, durchmesser FROM ringtyp", self.get_engine())
             df_serien = pd.read_sql("SELECT * FROM " + self.bd.get_tbl_name_ringserie() + " WHERE status = 0 OR status = 1",
@@ -515,15 +514,16 @@ class _RingSerienVerwaltung(QDialog):
             rberi_lib.QMessageBoxB('ok', 'Fehler bei der Datenbankabfrage.', 'Datenbankfehler', [str(err)]).exec_()
             return
 
-        info_diag.layout.addWidget(tbl, 0, 0)
-        info_diag.btn = QPushButton("ok")
-        info_diag.layout.addWidget(info_diag.btn, 1, 0)
-        df_ringe = pd.DataFrame()
+        self.info_diag.layout.addWidget(tbl, 0, 0)
+        self.info_diag.btn = QPushButton("ok")
+        self.info_diag.layout.addWidget(self.info_diag.btn, 1, 0)
+        self.info_diag.btn.clicked.connect(self.info_diag.close)
         for rtyp in pd.unique(df_serien['ringtypRef'].values.ravel()):        # ints! Referenz auf die ringtypID
             ringtyp_klasse = df_ringtyp.query("ringtypID == " + str(rtyp))['klasse'].iloc[0]
             ringtyp_durchmesser = df_ringtyp.query("ringtypID == " + str(rtyp))['durchmesser'].iloc[0]
             df_spezial = df_serien.query("ringtypRef == " + str(rtyp))
             arr = pd.unique(df_spezial['ringserie'].values.ravel())
+            flag = False
             for serie in arr:
                 df_spezial_spezial = df_spezial.query('ringserie == "' + str(serie) + '"')
                 ringserie = str(serie)
@@ -551,14 +551,17 @@ class _RingSerienVerwaltung(QDialog):
                 try:
                     itemY.setData(Qt.DisplayRole, self.get_forecast(vorhanden, rtyp).strftime("%Y-%m-%d"))
                 except Exception as err:
-                    rberi_lib.QMessageBoxB('ok', 'Fehler bei der Forecastberechnung!', 'Interner Fehler!', str(err)).exec_()
+                    flag = True
                     itemY.setData(Qt.DisplayRole, "Fehler!")
                 tbl.setItem(tbl.rowCount()-1, 4, itemY)
-
+        if flag:
+            rberi_lib.QMessageBoxB('ok', 'Es gab Fehler bei der Forecastberechnung! Spalte ist mit "Fehler" markiert.',
+                                   'Interner Fehler!', str(err)).exec_()
         tbl.resizeColumnsToContents()
         tbl.setSortingEnabled(True)
-        tbl.sortByColumn(3, Qt.AscendingOrder)
-        info_diag.exec_()
+        tbl.sortByColumn(4, Qt.AscendingOrder)
+        self.info_diag.exec()
+
 
 
     def fill_TBL_ringtypen(self):
@@ -847,7 +850,7 @@ class _RingSerienVerwaltung(QDialog):
             anr_ringe_eingabe = self.get_anz_ringe()
             if self.ui.INP_anz_ring_schnur.text() == "":
                 self.ui.INP_anz_ring_schnur.setText(str(anz_ringe))
-            elif anr_ringe_eingabe != -1 and anr_ringe_eingabe != anz_ringe:
+            elif anr_ringe_eingabe != -1 and anz_ringe % anr_ringe_eingabe != 0:
                 answer = rberi_lib.QMessageBoxB('yn', 'Anzahl Ringe passt nicht mit Start- und Endwert zusammen. Soll '
                                                       'automatisch korrigiert werden?', 'Anzahl Ringe',
                                                 [f'Anzahl laut Eingabe: {anr_ringe_eingabe}',
