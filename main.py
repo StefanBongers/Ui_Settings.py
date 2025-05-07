@@ -49,7 +49,7 @@ from img_viewer import ImageViewer
 from calendar import monthrange
 
 from Beringungsoberflaeche.dialog_new_user import Ui_Dialogs
-from Beringungsoberflaeche.beringerverwaltung_ui import Ui_beringerverwaltung
+from Beringungsoberflaeche.beringerverwaltung_ui import Dialog_beringerverwaltung
 from Beringungsoberflaeche.Hauptfenster_neu.mainwindow_V2 import Ui_MainWindow
 from Beringungsoberflaeche.Hauptfenster_neu.walinder import Ui_Form as UiWalinder
 from Beringungsoberflaeche.search_gui.dialog import Ui_Dialog
@@ -4348,7 +4348,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if get_connection_status(engine):
             self.df_ringer = pd.read_sql("SELECT * FROM ringer", engine)
             df_ringer = self.df_ringer
-            beringerverwaltung_ui = Ui_beringerverwaltung(self.berechtigung_beringer_speichern, df_ringer)
+            beringerverwaltung_ui = Dialog_beringerverwaltung(self.berechtigung_beringer_speichern, df_ringer)
             self.__set_widget_stylesheet(beringerverwaltung_ui)
             if beringerverwaltung_ui.exec_() == QtWidgets.QMessageBox.Accepted:
                 # speichern:
@@ -4826,13 +4826,21 @@ class MainWindow(QtWidgets.QMainWindow):
                                         "' and nachname = '" + nachname + "'", engine)
                 ringer = df_ringer.iloc[0, 0]
                 cursor = engine.cursor()
-                cursor.execute("Insert into esf (station, ringnummer, fangart, zentrale, datum, uhrzeit, "
-                               "bemerkung, ringer) Values ('" + self.ui.CMB_station.currentText() + "', '" +
+                try:
+                    cursor.execute("Insert into esf (station, ringnummer, fangart, zentrale, datum, uhrzeit, "
+                               "bemerkung, ringer, jahr) Values ('" + self.ui.CMB_station.currentText() + "', '" +
                                ring_nr_such + "', 'd', '" +
                                self.get_zentrale(self.ui.CMB_zentrale.currentText()) + "', '" +
                                self.ui.dateEdit.date().toString(Qt.ISODate) + "', " +
                                str(self.ui.timeEdit.time().hour()) + ", '" +
-                               self.ui.PTE_bemerkung.toPlainText() + "', '" + str(ringer) + "')")
+                               self.ui.PTE_bemerkung.toPlainText() + "', '" + str(ringer) + "', '" + str(date.today().year) +
+                                                                                                         "')")
+                except Exception as exp:
+                    rberi_lib.QMessageBoxB('ok', 'Fehler bei der Anlage des defekten Ringes. Bitte Fehlermeldung anschauen und '
+                                                 'ggf. nochmal probieren. Sonst Entwickler kontaktieren.', 'Interner Fehler',
+                                           str(exp), qss=bd.get_qss()).exec()
+                    cursor.close()
+                    return
                 engine.commit()
                 cursor.close()
                 self.clearEingabe()

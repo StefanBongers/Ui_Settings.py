@@ -85,11 +85,49 @@ class Ui_Settings(QDialog):
                 qss = l[l.find("=") + 1:].strip()
                 self.ui.INP_qss_file.setText(qss)
             elif "self.BilderPfad" in l:
-                txt = l[l.find("=") +1:].strip()
+                txt = l[l.find("=") + 1:].strip()
                 self.BilderPfad = txt
+                self.ui.INP_bilder_dir.setText(txt)
             elif "self.hilfeBilderPfad" in l:
                 txt = l[l.find("=") + 1:].strip()
                 self.hilfeBilderPfad = txt
+                self.ui.INP_hilfebilder_dir.setText(txt)
+            elif "self.debug" in l:
+                txt = l[l.find("=") + 1:].strip()
+                self.debug = txt
+            elif "self.mit_anmeldung" in l:
+                txt = l[l.find("=") + 1:].strip()
+                self.mit_anmeldung = txt
+            elif "self.tbl_name_ringserie" in l:
+                txt = l[l.find("=") + 1:].strip()
+                self.tbl_name_ringserie = txt
+            elif "self.age_adult_allowed" in l:
+                txt = l[l.find("=") + 1:].strip()
+                self.age_adult_allowed = txt
+            elif "self.zoom_seitenbreite" in l:
+                txt = l[l.find("=") + 1:].strip()
+                self.zoom_seitenbreite = txt
+            elif "self.version" in l:
+                txt = l[l.find("=") + 1:].strip()
+                self.version = txt
+            elif "self.kontaktdaten" in l:
+                txt = l[l.find("=") + 1:].strip()
+                self.kontaktdaten = txt
+            elif "self.mariabackuppath" in l:
+                txt = l[l.find("=") + 1:].strip()
+                self.mariabackuppath = txt
+            elif "// Hinweis" in l:
+                txt = l[l.find("=") + 1:].strip()
+                self.hinweis = txt
+            elif "self.drucker_vendor_id" in l:
+                txt = l[l.find("=") + 1:].strip()
+                self.drucker_vendor_id = txt
+            elif "self.drucker_typ_id" in l:
+                txt = l[l.find("=") + 1:].strip()
+                self.drucker_typ_id = txt
+            elif "self.usb_vol_name" in l:
+                txt = l[l.find("=") + 1:].strip()
+                self.usb_vol_name = txt
 
     def _load_further_data(self):
         df_defaults = pd.read_sql("SELECT * FROM defaults", self.mariaDB_engine)
@@ -105,8 +143,6 @@ class Ui_Settings(QDialog):
         for l in df_zentralen.iterrows():
             if l[1][0] == zentrale_sec_key:
                 self.ui.CMB_Zentrale.setCurrentText(str(l[1][1]))
-
-
 
     def _save_clicked(self):
         if self._get_connection():
@@ -145,30 +181,56 @@ class Ui_Settings(QDialog):
         qss = self.ui.INP_qss_file.text()
 
         new_content = []
-        txt = "FIN_19780617_20240525"
+        txt = "FIN_19780617_20240525\n"
         new_content.append(txt)
-        txt = "self.DB_host=" + self.ui.INP_DB_host.text()
+        txt = "self.key=7mwDo5p3mft4qW3DJzhwKzC65vgYWgW45FhL_0DOg2E=\n"
         new_content.append(txt)
-        txt = "self.DB_user=" + self.ui.INP_DB_user.text()
+        txt = "self.DB_host=" + self.ui.INP_DB_host.text() + "\n"
         new_content.append(txt)
-        txt = "self.DB_port=" + self.ui.INP_DB_port.text()
+        txt = "self.DB_user=" + self.ui.INP_DB_user.text()  + "\n"
         new_content.append(txt)
-        txt = "self.DB_database=" + self.ui.INP_DB_database.text()
+        txt = "self.DB_port=" + self.ui.INP_DB_port.text() + "\n"
+        new_content.append(txt)
+        txt = "self.DB_database=" + self.ui.INP_DB_database.text() + "\n"
         new_content.append(txt)
         fernet_dings = Fernet(self.key)
         token = fernet_dings.encrypt(self.ui.INP_DB_password.text().encode())
         pw = token.decode()
-        txt = "self.DB_password=" + pw
+        txt = "self.DB_password=" + pw + "\n"
         new_content.append(txt)
-        txt = "self.ringnummern_laenge=" + str(ringnr_num)
+        txt = "self.ringnummern_laenge=" + str(ringnr_num) + "\n"
         new_content.append(txt)
-        txt = "self.camport=" + str(camport)
+        txt = "self.camport=" + str(camport) + "\n"
         new_content.append(txt)
-        txt = "self.qss=" + str(qss)
+        txt = "self.qss=" + str(qss) + "\n"
         new_content.append(txt)
-        txt = "self.BilderPfad=" + self.ui.INP_bilder_dir.text()
+        txt = "self.BilderPfad=" + self.ui.INP_bilder_dir.text() + "\n"
         new_content.append(txt)
-        txt = "self.hilfeBilderPfad=" + self.ui.INP_hilfebilder_dir.text()
+        txt = "self.hilfeBilderPfad=" + self.ui.INP_hilfebilder_dir.text() + "\n"
+        new_content.append(txt)
+        txt = "self.debug=" + str(self.debug) + "\n"
+        new_content.append(txt)
+        txt = "self.mit_anmeldung=" + str(self.mit_anmeldung) + "\n"
+        new_content.append(txt)
+        txt = "self.tbl_name_ringserie=" + str(self.tbl_name_ringserie) + "\n"
+        new_content.append(txt)
+        txt = "self.age_adult_allowed=" + str(self.age_adult_allowed) + "\n"
+        new_content.append(txt)
+        txt = "self.zoom_seitenbreite=" + str(self.zoom_seitenbreite) + "\n"
+        new_content.append(txt)
+        txt = "self.version=" + str(self.version) + "\n"
+        new_content.append(txt)
+        txt = "self.kontaktdaten=" + str(self.kontaktdaten) + "\n"
+        new_content.append(txt)
+        txt = "self.mariabackuppath=" + str(self.mariabackuppath) + "\n"
+        new_content.append(txt)
+        txt = "// Hinweis " + str(self.hinweis) + "\n"
+        new_content.append(txt)
+        txt = "self.drucker_vendor_id=" + str(self.drucker_vendor_id) + "\n"
+        new_content.append(txt)
+        txt = "self.drucker_typ_id=" + str(self.drucker_typ_id) + "\n"
+        new_content.append(txt)
+        txt = "self.usb_vol_name=" + str(self.usb_vol_name) + "\n"
         new_content.append(txt)
 
         file = open("basic_definitions.ini", "w")
@@ -193,9 +255,14 @@ class Ui_Settings(QDialog):
                 if line[1][1] == zentrale_name:
                     zentrale_sec_key = line[1][0]
             cursor = self.mariaDB_engine.cursor()
-            SQL_text = "UPDATE defaults SET Station=" + str(stations_sec_key) + ", " \
-                                                                                "Zentrale=" + str(zentrale_sec_key) + ", " \
-                                                                                                                      "Bilderverzeichnis='" + self.path + "' WHERE defaultID=1"
+            if stations_sec_key is None:
+                stations_sec_key = 1
+            if zentrale_sec_key is None:
+                zentrale_sec_key = 1
+            if self.BilderPfad is None:
+                self.BilderPfad = "not set"
+            SQL_text = ("UPDATE defaults SET Station=" + str(stations_sec_key) + ", " +
+                        "Zentrale=" + str(zentrale_sec_key) + ", Bilderverzeichnis='" + self.BilderPfad + "' WHERE defaultID=1")
             cursor.execute(SQL_text)
             self.mariaDB_engine.commit()
         self.accept()
