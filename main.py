@@ -15,7 +15,7 @@ import win32con
 import win32gui
 import wmi
 from PIL import Image
-from PyQt5.QtGui import QPixmap, QImage, QPainter, QColor, QFontMetrics
+from PyQt5.QtGui import QPixmap, QImage, QPainter, QColor, QFontMetrics, QKeyEvent
 from _ctypes import Structure
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -41,7 +41,7 @@ from PyQt5.QtWidgets import (QPushButton, QLabel, QLineEdit, QGridLayout, QCombo
                              QVBoxLayout, QShortcut, QGraphicsPixmapItem, QGraphicsScene, QGraphicsView,
                              QMainWindow, QCheckBox, QRadioButton, QTableWidget, QHBoxLayout, QListWidget,
                              QListWidgetItem, QPlainTextEdit)
-from PyQt5 import QtWidgets, QtGui, QtCore, sip, QtWebEngineWidgets
+from PyQt5 import QtWidgets, QtGui, QtCore, sip
 from PyQt5.QtCore import QDate, QTime, Qt, QEvent, QObject, QRegularExpression, pyqtSignal, pyqtSlot, QEventLoop, QTimer
 from cryptography.fernet import Fernet
 from img_viewer import ImageViewer
@@ -6915,7 +6915,10 @@ def make_table_entries_pretty(table: QTableWidget, col_art, col_ringer):
         return
 
     for i in range(0, table.rowCount()):
-        esf_ = table.item(i, col_art).text()
+        try:
+            esf_ = table.item(i, col_art).text()
+        except AttributeError:
+            continue
         new_art = df_art.query("esf_kurz == '" + esf_ + "'")['deutsch'].iloc[0]
         ringer_ = table.item(i, col_ringer).text()
         new_name_df = df_ringer.query("ringer_new == '" + ringer_ + "'")
@@ -6994,20 +6997,35 @@ def write_df_to_qtable(df_to_integrate: pd.DataFrame, table: QTableWidget, *args
     df_array = df_to_integrate.values
 
     for row in range(df_to_integrate.shape[0]):
-        art_esw = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['deutsch'].iloc[0]
-        ringer = (df_ringer.query("ringer_new == '" + df_array[row, 5] + "'")['nachname'].iloc[0] + ", " +
+        try:
+            art_esw = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['deutsch'].iloc[0]
+        except Exception:
+            continue
+        try:
+            ringer = (df_ringer.query("ringer_new == '" + df_array[row, 5] + "'")['nachname'].iloc[0] + ", " +
                   df_ringer.query("ringer_new == '" + df_array[row, 5] + "'")['vorname'].iloc[0])
-        teilfeder_mw = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['f_ex'].iloc[0]
+        except Exception:
+            ringer = ""
+        try:
+            teilfeder_mw = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['f_ex'].iloc[0]
+        except Exception:
+            teilfeder_mw = "0"
         try:
             teilfeder_mw_float = float(teilfeder_mw)
         except ValueError:
             teilfeder_mw_float = 0
-        teilfeder_stdab = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['f_s'].iloc[0]
+        try:
+            teilfeder_stdab = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['f_s'].iloc[0]
+        except Exception:
+            teilfeder_stdab = "0"
         try:
             teilfeder_stdab_float = float(teilfeder_stdab)
         except ValueError:
             teilfeder_stdab_float = 0
-        wing_mw = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['w_ex'].iloc[0]
+        try:
+            wing_mw = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['w_ex'].iloc[0]
+        except Exception:
+            wing_mw = "0"
         try:
             wing_mw_float = float(wing_mw)
         except ValueError:
