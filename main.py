@@ -6915,16 +6915,22 @@ def make_table_entries_pretty(table: QTableWidget, col_art, col_ringer):
         return
 
     for i in range(0, table.rowCount()):
+        print("i = " + str(i) + "; col_art = " + str(col_art))
         try:
             esf_ = table.item(i, col_art).text()
-        except AttributeError:
+        except Exception as err:                  # AttributeError:
+            if bd.get_debug(): print("Errormessage in make_table_entries_pretty: " + str(err))
             continue
-        new_art = df_art.query("esf_kurz == '" + esf_ + "'")['deutsch'].iloc[0]
+        if esf_ != "":
+            new_art = df_art.query("esf_kurz == '" + esf_ + "'")['deutsch'].iloc[0]
+        else:
+            new_art = ""
         ringer_ = table.item(i, col_ringer).text()
         new_name_df = df_ringer.query("ringer_new == '" + ringer_ + "'")
         new_name = new_name_df['nachname'].iloc[0] + ", " + new_name_df['vorname'].iloc[0]
         table.setItem(i, col_art, QTableWidgetItem(new_art))
         table.setItem(i, col_ringer, QTableWidgetItem(new_name))
+
 
 
 def write_df_to_qtable(df_to_integrate: pd.DataFrame, table: QTableWidget, *args, **kwargs):
@@ -7000,43 +7006,37 @@ def write_df_to_qtable(df_to_integrate: pd.DataFrame, table: QTableWidget, *args
         try:
             art_esw = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['deutsch'].iloc[0]
         except Exception:
-            continue
+            art_esw = "DEFEKT"
         try:
             ringer = (df_ringer.query("ringer_new == '" + df_array[row, 5] + "'")['nachname'].iloc[0] + ", " +
                   df_ringer.query("ringer_new == '" + df_array[row, 5] + "'")['vorname'].iloc[0])
         except Exception:
             ringer = ""
-        try:
+
+        if art_esw != "DEFEKT":
             teilfeder_mw = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['f_ex'].iloc[0]
-        except Exception:
-            teilfeder_mw = "0"
+            teilfeder_stdab = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['f_s'].iloc[0]
+            wing_mw = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['w_ex'].iloc[0]
+            wing_stdab = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['w_s'].iloc[0]
+            masse_mw = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['g_ex'].iloc[0]
+            masse_stdab = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['g_s'].iloc[0]
+
         try:
             teilfeder_mw_float = float(teilfeder_mw)
         except ValueError:
             teilfeder_mw_float = 0
         try:
-            teilfeder_stdab = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['f_s'].iloc[0]
-        except Exception:
-            teilfeder_stdab = "0"
-        try:
             teilfeder_stdab_float = float(teilfeder_stdab)
         except ValueError:
             teilfeder_stdab_float = 0
         try:
-            wing_mw = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['w_ex'].iloc[0]
-        except Exception:
-            wing_mw = "0"
-        try:
             wing_mw_float = float(wing_mw)
         except ValueError:
             wing_mw_float = 0
-        wing_stdab = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['w_s'].iloc[0]
         try:
             wing_stdab_float = float(wing_stdab)
         except ValueError:
             wing_stdab_float = 0
-        masse_mw = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['g_ex'].iloc[0]
-        masse_stdab = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['g_s'].iloc[0]
         try:
             masse_mw_float = float(masse_mw)
             masse_stdab_float = float(masse_stdab)
