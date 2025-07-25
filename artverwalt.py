@@ -565,10 +565,10 @@ class ArtverwaltungWindow(QWidget):
                 try:
                     cursor = self.get_engine().cursor()
                     if self.tolerances:
-                        tol_txt_set = ("f_ex, f_s, f_d_neg, f_d_pos, w_ex, w_s, w_d_neg, w_d_pos, quo_f3_flg_ex, "
+                        tol_txt_set = (", f_ex, f_s, f_d_neg, f_d_pos, w_ex, w_s, w_d_neg, w_d_pos, quo_f3_flg_ex, "
                                        "quo_f3_flg_s, quo_f3_flg_d_neg, quo_f3_flg_d_pos, show_q_msg, g_ex, g_s, "
                                        "g_d_neg,g_d_pos, show_g_msg")
-                        tol_txt_val = (str(self.tolerances['teilfeder_mw']) + ", " +
+                        tol_txt_val = (", " + str(self.tolerances['teilfeder_mw']) + ", " +
                                        str(self.tolerances['teilfeder_std']) + ", " +
                                        str(self.tolerances['teilfeder_faktor_min']) + ", " +
                                        str(self.tolerances['teilfeder_faktor_max']) + ", " +
@@ -589,26 +589,26 @@ class ArtverwaltungWindow(QWidget):
                     else:
                         tol_txt_set = ""
                         tol_txt_val = ""
-                    cursor.execute(
-                        "INSERT INTO arten (deutsch, lateinisch, englisch, esf_kurz, erbe_kurz, prg_art, mri_art, "
-                        "ring_serie, ringtypMaleRef, ringtypFemaleRef, juv_moult, sex_determ, bemerkung, euring, " +
-                        tol_txt_set + ") "
-                        "VALUES ('" +
-                        self.ui.INP_ArtD.text() + "', '" +
-                        self.ui.INP_ArtL.text() + "', '" +
-                        self.ui.INP_ArtE.text() + "', '" +
-                        self.ui.INP_ESF_kurz.text() + "', '" +
-                        self.ui.INP_erbe_kurz.text() + "', " +
-                        str(self.ui.CHB_programmart.isChecked()) + ", " +
-                        str(self.ui.CHB_mriart.isChecked()) +
-                        ", NULL, " +
-                        get_ringtypref(self.ui.CMB_ringtyp_male.currentText()) + ", " +
-                        ringtypfemale + ", " +
-                        str(self.ui.CHB_juv_mauser.isChecked()) + ", " +
-                        str(self.ui.CHB_sex_moegl.isChecked()) + ", '" +
-                        self.ui.INP_Bemerkung.toPlainText() + "', '" +
-                        self.ui.INP_euring.text() + "', " +
-                        tol_txt_val + ")")
+
+                    sql_command = ("INSERT INTO arten (deutsch, lateinisch, englisch, esf_kurz, erbe_kurz, prg_art, mri_art, "
+                                   "ring_serie, ringtypMaleRef, ringtypFemaleRef, juv_moult, sex_determ, bemerkung, "
+                                   "euring" + tol_txt_set + ") VALUES ('" + self.ui.INP_ArtD.text() + "', '" +
+                                    self.ui.INP_ArtL.text() + "', '" +
+                                    self.ui.INP_ArtE.text() + "', '" +
+                                    self.ui.INP_ESF_kurz.text() + "', '" +
+                                    self.ui.INP_erbe_kurz.text() + "', " +
+                                    str(self.ui.CHB_programmart.isChecked()) + ", " +
+                                    str(self.ui.CHB_mriart.isChecked()) +
+                                    ", NULL, " +
+                                    get_ringtypref(self.ui.CMB_ringtyp_male.currentText()) + ", " +
+                                    ringtypfemale + ", " +
+                                    str(self.ui.CHB_juv_mauser.isChecked()) + ", " +
+                                    str(self.ui.CHB_sex_moegl.isChecked()) + ", '" +
+                                    self.ui.INP_Bemerkung.toPlainText() + "', '" +
+                                    self.ui.INP_euring.text() + "'" +
+                                    tol_txt_val + ")")
+                    print("sql_command = " + sql_command)
+                    cursor.execute(sql_command)
                     self.get_engine().commit()
                     cursor.close()
                     self.set_logging(datetime.datetime.now(), "verwaltung",

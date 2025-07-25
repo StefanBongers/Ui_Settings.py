@@ -15,13 +15,11 @@ import win32con
 import win32gui
 import wmi
 from PIL import Image
-from PyQt5.QtGui import QPixmap, QImage, QPainter, QColor, QFontMetrics, QKeyEvent
+from PyQt5.QtGui import QPixmap, QImage, QPainter, QColor, QFontMetrics
 from _ctypes import Structure
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure as FigBon
-# from qtpy import QtWebEngineWidgets
-
 from usbmonitor import USBMonitor
 
 import mariadb
@@ -40,9 +38,10 @@ from PyQt5.QtWidgets import (QPushButton, QLabel, QLineEdit, QGridLayout, QCombo
                              QTableWidgetItem, QTreeWidgetItem, QTreeWidgetItemIterator, QFileDialog, QWidget,
                              QVBoxLayout, QShortcut, QGraphicsPixmapItem, QGraphicsScene, QGraphicsView,
                              QMainWindow, QCheckBox, QRadioButton, QTableWidget, QHBoxLayout, QListWidget,
-                             QListWidgetItem, QPlainTextEdit)
+                             QListWidgetItem, QPlainTextEdit, QProgressBar)
 from PyQt5 import QtWidgets, QtGui, QtCore, sip
-from PyQt5.QtCore import QDate, QTime, Qt, QEvent, QObject, QRegularExpression, pyqtSignal, pyqtSlot, QEventLoop, QTimer
+from PyQt5.QtCore import QDate, QTime, Qt, QEvent, QObject, QRegularExpression, pyqtSignal, pyqtSlot, QEventLoop, QTimer, \
+     QSortFilterProxyModel
 from cryptography.fernet import Fernet
 from img_viewer import ImageViewer
 
@@ -53,11 +52,15 @@ from Beringungsoberflaeche.beringerverwaltung_ui import Dialog_beringerverwaltun
 from Beringungsoberflaeche.Hauptfenster_neu.mainwindow_V2 import Ui_MainWindow
 from Beringungsoberflaeche.Hauptfenster_neu.walinder import Ui_Form as UiWalinder
 from Beringungsoberflaeche.search_gui.dialog import Ui_Dialog
+from Beringungsoberflaeche.wiederfangranking import Ui_Dialog as UiWiederfangRanking
 from Beringungsoberflaeche.datenblatt_zwei.ui_datenblatt_zwei import Ui_Ui_Datenblatt_zwei as Ui_db2
 from Beringungsoberflaeche.Hauptfenster_neu.search_ringnb_form import Ui_Form as Ui_search_ringnb_form
 from Beringungsoberflaeche.Hauptfenster_neu.benutzereinstellungen import Ui_Dialog as Ui_Dialog_usersettings
 from ringserienverwaltung import _RingSerienVerwaltung as Ui_RingSerienVerwaltung
 from Ui_Settings import Ui_Settings
+from netzfachauswertung import Netzfach_Auswertung
+from sql_command import SQL_command
+from tagebucheintrag import Tagebucheintrag
 
 matplotlib.use('Qt5Agg')
 
@@ -687,7 +690,7 @@ class BD:
                 widget.destroy()
                 self.qss = qss
                 return True
-            except:
+            except Exception:
                 return False
         else:
             return False
@@ -1086,6 +1089,19 @@ class Loginpage(QtWidgets.QDialog):
         self.accept()
 
 
+class SortFilterProxyModel(QSortFilterProxyModel):
+    def lessThan(self, left_index, right_index):
+
+        left_var = left_index.data(Qt.EditRole)
+        right_var = right_index.data(Qt.EditRole)
+
+        try:
+            return float(left_var) < float(right_var)
+        except (ValueError, TypeError):
+            pass
+        return left_var < right_var
+
+
 class _UiSearch(QWidget):
     """
     =====================================================================================================================
@@ -1152,6 +1168,9 @@ class _UiSearch(QWidget):
         self.plotWidget = None
         self.search_ui = Ui_Dialog()
         self.search_ui.setupUi(self)
+        self.search_ui.TBL_ergebnis.setStyleSheet("""
+                    font-size: 11px;
+                """)
         self.search_ui.CMB_art.installEventFilter(self)
         self.df_arten = pd.DataFrame()
         self.df_ringer = pd.DataFrame()
@@ -2017,7 +2036,11 @@ class _UiSearch(QWidget):
             sums_row = df_complex.sum(axis=1, skipna=True, numeric_only=True)
             df_complex.insert(loc=len(df_complex.columns), column='Summe:', value=sums_row)
             for ind, ser in df_complex.items():
-                df_complex.loc["Summe:", ind] = ser.sum()
+                try:
+                    df_complex.loc["Summe:", ind] = ser.sum()
+                except TypeError:
+                    df_complex.loc["Summe:", ind] = 0
+                    continue
         return df_complex
 
     def __show(self):
@@ -2098,7 +2121,9 @@ class _UiSearch(QWidget):
         self.search_ui.TBL_ergebnis.setRowCount(self.df_ergebnis.shape[0])
 
         for idx in self.df_ergebnis.index:
-            self.search_ui.TBL_ergebnis.setItem(row_c, 0, QTableWidgetItem(idx))
+            _item = QTableWidgetItem()
+            _item.setData(Qt.DisplayRole, idx)
+            self.search_ui.TBL_ergebnis.setItem(row_c, 0, _item)
             row_c += 1
 
         if not self.df_ergebnis.empty:
@@ -2113,8 +2138,10 @@ class _UiSearch(QWidget):
                         new_value = int(row_value)
                     except ValueError:
                         new_value = row_value
-                    self.search_ui.TBL_ergebnis.setItem(row_c - row_count_, col_count,
-                                                        QTableWidgetItem(str(new_value)))
+
+                    _item = QTableWidgetItem()
+                    _item.setData(Qt.DisplayRole, new_value)
+                    self.search_ui.TBL_ergebnis.setItem(row_c - row_count_, col_count, _item)
                     row_count_ -= 1
 
         self.search_ui.PRGB_dav.setValue(self.search_ui.PRGB_dav.maximum())
@@ -2166,7 +2193,9 @@ class _UiSearch(QWidget):
             self.search_ui.TBL_ergebnis.setItem(0, 0, QTableWidgetItem("ZZ Summe"))
             colcnt = 1
             for col, ser in self.df_current.items():
-                self.search_ui.TBL_ergebnis.setItem(0, colcnt, QTableWidgetItem(str(ser.sum())))
+                item_2_integrate = QTableWidgetItem()
+                item_2_integrate.setData(Qt.DisplayRole, int(ser.sum()))
+                self.search_ui.TBL_ergebnis.setItem(0, colcnt, item_2_integrate)
                 colcnt += 1
 
     def write_df_to_qtable_result(self, df: pd.DataFrame, table: QTableWidget):
@@ -2181,9 +2210,13 @@ class _UiSearch(QWidget):
         table.setHorizontalHeaderLabels(headers)
         row = 0
         for ind, ser in df.iterrows():
-            table.setItem(row, 0, QTableWidgetItem(str(ind)))
+            _item = QTableWidgetItem()
+            _item.setData(Qt.DisplayRole, ind)
+            table.setItem(row, 0, _item)
             for col in range(1, table.columnCount()):
-                table.setItem(row, col, QTableWidgetItem(str(ser[col - 1])))
+                _item = QTableWidgetItem()
+                _item.setData(Qt.DisplayRole, ser[col-1])
+                table.setItem(row, col, _item)
             row += 1
 
     def get_table_as_df(self, **kwargs):
@@ -2527,12 +2560,96 @@ class _UiDatenblatt2(QDialog):
         self.ui.CHB_mauserkarte.setChecked(True if ('mauserkarte' in data and data['mauserkarte'] == 1) else False)
 
 
+class _UiWiederfangRanking(QDialog):
+    def __init__(self, parent=None):
+        QDialog.__init__(self, parent)
+        self.ui = UiWiederfangRanking()
+        self.ui.setupUi(self)
+        self.ui.TBL_resultat.setStyleSheet("""
+            font-size: 11px;
+        """)
+        self.ui.lineEdit.setText("5")
+        self.ui.lineEdit.setToolTip("Standardsuche mit mehr als 5 Wiederfängen...")
+
+        self.ui.BTN_schliessen.clicked.connect(self.close)
+        self.ui.BTN_go.clicked.connect(self.go)
+        self.ui.DTE_start.setDate(QDate(datetime.today().year, datetime.today().month, datetime.today().day))
+        self.ui.DTE_ende.setDate(QDate(datetime.today().year, datetime.today().month, datetime.today().day))
+        self.ui.RBTN_saison.clicked.connect(self.saisongrenze)
+        self.ui.RBTN_halloffame.clicked.connect(self.halloffame)
+
+    def go(self):
+        sql = "SELECT ringnummer, art, COUNT(*) AS RingAnz FROM esf WHERE datum >= '"
+        start = self.ui.DTE_start.date().toString(Qt.ISODate)
+        ende = self.ui.DTE_ende.date().toString(Qt.ISODate)
+        nmb_txt = self.ui.lineEdit.text()
+        if not nmb_txt.isdigit():
+            nmb = 5
+        else:
+            nmb = int(nmb_txt)
+            if nmb < 5:
+                if rberi_lib.QMessageBoxB('ny', "Wiederfangliste mit allen Wiederfängen weniger als " + str(nmb) + " wirklich "
+                                                                                                                   "ausgeben? Das "
+                                                                                                                   "könnte dauern "
+                                                                                                                   ".... ",
+                                          "Warnung!").exec_() == QMessageBox.Accepted:
+                    nmb = int(nmb_txt)
+                else:
+                    nmw = 5
+        sql += start + "' and datum <= '" + ende + "' GROUP BY ringnummer HAVING COUNT(*) > " + str(nmb) + " ORDER BY RingAnz DESC"
+        try:
+            df_wfr = pd.read_sql(sql, engine)
+        except Exception as err:
+            rberi_lib.QMessageBoxB('ok', 'Datenbankfehler. Siehe Details.', 'Datenbankfehler', str(err), qss=bd.get_qss()).exec_()
+            return
+
+        df_wfr['Erstes Datum'] = ''
+        df_wfr['Letztes Datum'] = ''
+        df_wfr = df_wfr.rename(columns={'RingAnz': 'Wie oft da gewesen?'})
+
+        self.ui.PRGB.setValue(0)
+        self.ui.PRGB.setMaximum(df_wfr.shape[0])
+        for row in range(df_wfr.shape[0]):
+            self.ui.PRGB.setValue(math.floor(row))
+            self.ui.PRGB.setFormat("Datenbankabfrage ... %p%")
+
+            sql_t = "SELECT datum FROM esf WHERE ringnummer = '" + df_wfr['ringnummer'][row] + "'"
+            try:
+                df_datum = pd.read_sql(sql_t, engine)
+
+            except Exception as err:
+                rberi_lib.QMessageBoxB('ok', 'Datenbankfehler. Siehe Details.', 'Datenbankfehler', str(err),
+                                       qss=bd.get_qss()).exec_()
+                return
+            df_datum_sort = df_datum.sort_values(by="datum", ascending=True).reset_index(drop=True)
+            try:
+                df_wfr.loc[row, 'Erstes Datum'] = df_datum_sort['datum'][0].strftime('%d.%m.%Y')
+                df_wfr.loc[row, 'Letztes Datum'] = df_datum_sort['datum'][df_datum.shape[0]-1].strftime('%d.%m.%Y')
+            except Exception as err:
+                print(str(err))
+                return
+
+        write_df_to_qtable(df_wfr, self.ui.TBL_resultat, {"progressbar": self.ui.PRGB})
+        make_table_entries_pretty(self.ui.TBL_resultat, 1, 5000, {"progressbar": self.ui.PRGB})
+        self.ui.TBL_resultat.resizeColumnsToContents()
+
+    def saisongrenze(self):
+        self.ui.DTE_start.setDate(QDate(date.today().year, 6, 30))
+        self.ui.DTE_ende.setDate(QDate(date.today().year, date.today().month, date.today().day))
+
+    def halloffame(self):
+        self.ui.DTE_start.setDate(QDate(1963, 1, 1))
+        self.ui.DTE_ende.setDate(QDate(date.today().year, date.today().month, date.today().day))
+
+
 class _UiSearchItem(QDialog):
     def __init__(self, parent=None):
         QDialog.__init__(self, parent)
         self.ui = Ui_search_ringnb_form()
         self.ui.setupUi(self)
-
+        self.ui.TBL_results.setStyleSheet("""
+                    font-size: 11px;
+                    """)
         self.changedItems = []
         self.counter_ma_ok = 0
         self.matrix = {}
@@ -2695,22 +2812,26 @@ class _UiSearchItem(QDialog):
                                                                   "and datum <= '" + self.ui.DE_end.date().toString(
                     Qt.ISODate) + "' " + sql_txt_art)
 
-        print(f"{sql_txt}")
+        if bd.get_debug():
+            print(f"Starte Datenbankabfrage mit SQL_STRING = {sql_txt}")
+            print(f'{datetime.now()}')
         try:
             df_rnr = pd.read_sql(sql_txt, engine)
         except Exception as err:
             rberi_lib.QMessageBoxB('ok', 'Datenbankfehler. Siehe Details.', 'Datenbankfehler', str(err), qss=bd.get_qss()).exec_()
             return
-
+        if bd.get_debug():
+            print(f"Ende der Datenbankabfrage")
+            print(f'{datetime.now()}')
         if df_rnr.empty:
             rberi_lib.QMessageBoxB('ok', f'Kein Eintrag mit der Nummer "{rnr_raw}" oder der Art "{art_esf}" '
                                          f'oder einer Kombination aus beiden Angaben im abgegrenzten Zeitraum. '
                                          f'Bitte erneut versuchen.', 'Ringnummernsuche', qss=bd.get_qss()).exec_()
             return
 
-        write_df_to_qtable(df_rnr, self.ui.TBL_results)
+        write_df_to_qtable(df_rnr, self.ui.TBL_results, {"progressbar": self.ui.progressBar})
         try:
-            make_table_entries_pretty(self.ui.TBL_results, 1, 5)
+            make_table_entries_pretty(self.ui.TBL_results, 1, 5, {"progressbar": self.ui.progressBar})
         except Exception as err:
             rberi_lib.QMessageBoxB('ok', 'Art und Beringer konnten nicht decodiert werden. Siehe Details.', 'Dekodierfehler',
                                    str(err)).exec_()
@@ -3459,7 +3580,9 @@ class _UiSearchItem(QDialog):
                 for row, values in enumerate(reader):
                     self.ui.TBL_results.insertRow(row)
                     for column, value in enumerate(values):
-                        self.ui.TBL_results.setItem(row, column, QtWidgets.QTableWidgetItem(value))
+                        _item = QTableWidgetItem()
+                        _item.setData(Qt.DisplayRole, value)
+                        self.ui.TBL_results.setItem(row, column, _item)
 
             a = rberi_lib.QMessageBoxB('ync', 'Handelt es sich um eine Wiederfangfehlerliste, bestätige bitte mit Yes. Handelt '
                                               'es sich um eine Toleranzfehlerliste, bestätige bitte mit No. Wenn Du nicht weißt,'
@@ -3490,10 +3613,17 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, user_internal, parent=None):
         super().__init__(parent)
 
+        self.wfr = None
         self.viewPDF = None
         self.current_user = None
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
+        self.ui.TBL_wiederfaenge.setStyleSheet("""
+            font-size: 11px;
+        """)
+        self.ui.CMB_verletzungscode.setStyleSheet("""
+            font-size: 11px;
+        """)
         self.setWindowTitle("Geier")
 
         self.set_user(user_internal)
@@ -3595,11 +3725,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.actionRingserien.triggered.connect(self.ringserienverwaltung)
         self.ui.actionSuchen.triggered.connect(self.search)
         self.ui.actionEintrag_suchen.triggered.connect(self.search_item_ringnb)
+        self.ui.actionWiederfang_Ranking.triggered.connect(self.wiederfangranking)
+        self.ui.actionNetzfach_Auswertung.triggered.connect(self.netzfachauswertung)
+        self.ui.actionSQL_Befehl.triggered.connect(self.sql_command)
         self.ui.actionWalinder.triggered.connect(self.walinder)
         self.ui.actionAktueller_Status.triggered.connect(self.aktueller_status)
         self.ui.action_ueber_geier.triggered.connect(GeierStates.ueber_geier)
         self.ui.actionFeedback.triggered.connect(lambda: self.feedback('feedback'))
         self.ui.actionKontakt.triggered.connect(lambda: self.feedback('kontakt'))
+        self.ui.actionTagebucheintrag.triggered.connect(self.tagebucheintrag)
         self.ui.actionThemen.triggered.connect(self.change_theme)
         self.ui.actionGrosse_Schrift.triggered.connect(self.grosse_schrift)
         self.ui.actionKleine_Schrift.triggered.connect(self.kleine_schrift)
@@ -3613,6 +3747,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.BTN_speichern_zeitgleich.setShortcut(QtGui.QKeySequence("Ctrl+S"))
         self.ui.BTN_schliessen.setShortcut(QtGui.QKeySequence("Ctrl+C"))
         self.ui.actionHinzufuegen.setShortcut(QtGui.QKeySequence("Alt+E"))
+
+        self.shortcut_fleck = QShortcut(QtGui.QKeySequence("Ctrl+F"), self.ui.CHB_bruffleck)
+        self.shortcut_fleck.activated.connect(self.ui.CHB_bruffleck.toggle)
+
         self.shortcut1 = QShortcut(QtGui.QKeySequence("Ctrl+B"), self.ui.CMB_beringer)
         self.shortcut1.activated.connect(self.ui.CMB_beringer.setFocus)
 
@@ -3791,7 +3929,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 widget.setStyleSheet(fh.read())
         except Exception as exp:
             rberi_lib.QMessageBoxB('ok', "Das Stylesheet konnte nicht geladen werden.", "Stylesheet-Fehler", str(exp),
-                                       qss=bd.get_qss()).exec_()
+                                   qss=bd.get_qss()).exec_()
 
     def change_theme(self):
         def open_file_picker():
@@ -3856,7 +3994,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         for row in range(test_tbl.rowCount()):
             for col in range(test_tbl.columnCount()):
-                test_tbl.setItem(row, col, QTableWidgetItem('R' + str(row) + 'C' + str(col)))
+                _item = QTableWidgetItem()
+                _item.setData(Qt.DisplayRole, 'R' + str(row) + 'C' + str(col))
+                test_tbl.setItem(row, col, _item)
 
         test_tbl.resizeColumnsToContents()
 
@@ -4475,10 +4615,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 return
 
     def show_artverwaltung(self):
-        if self:
-            pass
-        if bd.get_debug():
-            print("Artverwaltung im Menue wurde aufgerufen... ")
         artv_ui = artverwalt.ArtverwaltungWindow(engine)
         self.__set_widget_stylesheet(artv_ui)
         artv_ui.show()
@@ -4521,7 +4657,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.walinder_dialog.ui.LBL_result_value.setText(f"{result:.1f}")
 
         def take_all():
-            if self.ui.CMB_art.currentText() != self.walinder_result and self.walinder_resut != 'UNIDENTIFIED':
+            if self.ui.CMB_art.currentText() != self.walinder_result and self.walinder_result != 'UNIDENTIFIED':
                 self.ui.CMB_art.setCurrentText(self.walinder_result)
                 self.db2['schnabellaenge'] = self.walinder_dialog.ui.INP_schnabellaenge.text()
                 self.db2['schnabelbreite'] = self.walinder_dialog.ui.INP_schnabelbreite.text()
@@ -4563,6 +4699,30 @@ class MainWindow(QtWidgets.QMainWindow):
             pass
         else:
             pass
+
+    def wiederfangranking(self):
+        self.wfr = _UiWiederfangRanking()
+        self.__set_widget_stylesheet(self.wfr)
+        self.wfr.exec_()
+
+    def netzfachauswertung(self):
+        self.nfa = Netzfach_Auswertung(engine)
+        self.__set_widget_stylesheet(self.nfa)
+        self.nfa.exec_()
+
+    def sql_command(self):
+        self.sql_command_gui = SQL_command(engine, bd.get_debug(), self.get_current_user())
+        self.sql_command_gui.show()
+
+    def tagebucheintrag(self):
+        items = []
+        for index in range(self.ui.LST_letzte_beringer.count()):
+            items.append(self.ui.LST_letzte_beringer.item(index).text())
+        kwarg = {'ringer': items}
+
+        self.tagebucheintrag_gui = Tagebucheintrag(engine, bd.get_debug(), self.get_current_user(), **kwarg)
+        self.__set_widget_stylesheet(self.tagebucheintrag_gui)
+        self.tagebucheintrag_gui.exec_()
 
     def backup(self):
         self.backup_window = Backup_GUI()
@@ -4828,13 +4988,13 @@ class MainWindow(QtWidgets.QMainWindow):
                 cursor = engine.cursor()
                 try:
                     cursor.execute("Insert into esf (station, ringnummer, fangart, zentrale, datum, uhrzeit, "
-                               "bemerkung, ringer, jahr) Values ('" + self.ui.CMB_station.currentText() + "', '" +
-                               ring_nr_such + "', 'd', '" +
-                               self.get_zentrale(self.ui.CMB_zentrale.currentText()) + "', '" +
-                               self.ui.dateEdit.date().toString(Qt.ISODate) + "', " +
-                               str(self.ui.timeEdit.time().hour()) + ", '" +
-                               self.ui.PTE_bemerkung.toPlainText() + "', '" + str(ringer) + "', '" + str(date.today().year) +
-                                                                                                         "')")
+                                   "bemerkung, ringer, jahr) Values ('" + self.ui.CMB_station.currentText() + "', '" +
+                                   ring_nr_such + "', 'd', '" +
+                                   self.get_zentrale(self.ui.CMB_zentrale.currentText()) + "', '" +
+                                   self.ui.dateEdit.date().toString(Qt.ISODate) + "', " +
+                                   str(self.ui.timeEdit.time().hour()) + ", '" +
+                                   self.ui.PTE_bemerkung.toPlainText() + "', '" + str(ringer) + "', '" + str(date.today().year) +
+                                   "')")
                 except Exception as exp:
                     rberi_lib.QMessageBoxB('ok', 'Fehler bei der Anlage des defekten Ringes. Bitte Fehlermeldung anschauen und '
                                                  'ggf. nochmal probieren. Sonst Entwickler kontaktieren.', 'Interner Fehler',
@@ -4865,6 +5025,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # self.ui.timeEdit.setTime(self.stunde)
 
         self.handle_fremdfang('save')  # nur zur Sicherheit, dass die Zentrale wieder gesperrt wird
+        self.ui.CMB_fett.setEnabled(True)
         self.ui.CMB_art.setFocus()
 
     def save_procedure_raw(self, fangart: str = 'xxx'):  # SE062459
@@ -4927,6 +5088,18 @@ class MainWindow(QtWidgets.QMainWindow):
                     return
             else:
                 _kerbe = 0
+
+            _innenfuss = self.ui.INP_innenfuss.text()
+            if len(_innenfuss) > 0:
+                _innenfuss = _innenfuss.replace(",", ".")
+                try:
+                    float(_innenfuss)
+                except ValueError:
+                    rberi_lib.QMessageBoxB('ok', 'Innenfuß ist keine Dezimalzahl!', 'Wertfehler', qss=bd.get_qss()).exec_()
+                    self.ui.INP_innenfuss.setFocus(True)
+                    return
+            else:
+                _innenfuss = 0
 
             if ((self.ui.CMB_fangart.currentText() == "e") and
                     (self.ui.INP_ringnummer.text() != self.format_ringnr(str(self.ringnumber_generated)))):
@@ -5082,7 +5255,9 @@ class MainWindow(QtWidgets.QMainWindow):
                              self.db2['schnabellaenge'] + "; schnabelbreite=" + self.db2['schnabelbreite'] + "; kerbe=" +
                              self.db2['kerbe'])
             else:
-                sql_text += "0,0,0,0,0,0,0,0,0,0,0,'','','', (Null), 0,0,0,"
+                sql_text += "0,0,0,0,0,0,0,0,0,0,0,'','','', (Null), 0,"
+                sql_text += str(_innenfuss) + ","
+                sql_text += "0,"
                 sql_text += str(_kerbe) + ", (Null), (Null), (Null), (Null), "
                 if _kerbe != 0:
                     print_txt = print_txt + "; kerbe=" + str(_kerbe)
@@ -5281,7 +5456,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.ui.TBL_wiederfaenge.setItem(i, 15, QTableWidgetItem(str(df_wiederfaenge['moult2'][i])))
                 self.ui.TBL_wiederfaenge.setItem(i, 16, QTableWidgetItem(str(df_wiederfaenge['moult3'][i])))
                 self.ui.TBL_wiederfaenge.setItem(i, 17, QTableWidgetItem(df_wiederfaenge['bemerkung'][i]))
-                self.ui.TBL_wiederfaenge.setItem(i, 18, QTableWidgetItem(str(df_wiederfaenge['frei1'][i])))
+                self.ui.TBL_wiederfaenge.setItem(i, 18, QTableWidgetItem(str(df_wiederfaenge['frei2'][i])))
                 self.ui.TBL_wiederfaenge.setItem(i, 19, QTableWidgetItem(str(df_wiederfaenge['frei4'][i])))
                 self.ui.TBL_wiederfaenge.setRowHeight(i, 7)
             self.ui.TBL_wiederfaenge.setSortingEnabled(True)
@@ -5416,7 +5591,9 @@ class MainWindow(QtWidgets.QMainWindow):
         Kombobox verlassen wurde), soll geschaut werden ob ein Bild angezeigt werden kann ...
         :return:
         """
+        self.ui.CMB_fett.setEnabled(True)
         if self.ui.CMB_art.currentIndex() >= 0:
+            self.ui.CMB_fett.setEnabled(True)
             self.pos_in_pic_list = 0  # FALLS Dateien im Ordner existieren, fangen wir wieder bei Pos. 0 an.
 
             art_deutsch = self.ui.CMB_art.currentText()
@@ -5441,6 +5618,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.ui.INP_ringnummer.setText("")
                 self.ui.CMB_fangart.setCurrentIndex(-1)
                 self.ui.CMB_fangart.setCurrentIndex(self.ui.CMB_fangart.findText("e"))
+
+            if self.ui.CMB_art.currentText() == "Eisvogel":
+                self.ui.CMB_fett.setEnabled(False)
         else:
             self.ui.LBL_vogelnamen.setText("")
             self.ui.BTN_pic.setEnabled(False)
@@ -5904,6 +6084,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.CMB_fangart.setEnabled(True)
         self.ui.timeEdit.setTime(QTime.currentTime())
         self.stunde = QTime.currentTime()
+        self.ui.CMB_fett.setEndabled(True)
         self.handle_fremdfang('save')
         self.set_edit_status(False)
 
@@ -6903,10 +7084,13 @@ def kerbe(kerbe_val, art_obj, fluegel, alter):
                                    'Sumpf/Teich?', qss=bd.get_qss()).exec_()
 
 
-def make_table_entries_pretty(table: QTableWidget, col_art, col_ringer):
+def make_table_entries_pretty(table: QTableWidget, col_art, col_ringer, *args):
     if not isinstance(table, QTableWidget):  # PyQt5.QtWidgets.QTableWiget
         return
-
+    self_args = {}
+    for arg in args:
+        if isinstance(arg, dict):
+            self_args = arg
     try:
         df_art = pd.read_sql("SELECT deutsch, esf_kurz FROM arten", engine)
         df_ringer = pd.read_sql("SELECT nachname, vorname, ringer_new FROM ringer", engine)
@@ -6914,23 +7098,39 @@ def make_table_entries_pretty(table: QTableWidget, col_art, col_ringer):
         rberi_lib.QMessageBoxB("ok", "Datenbankfehler!", "Datenbankfehler", str(err), qss=bd.get_qss()).exec_()
         return
 
+    flag_progbar = False
+    if "progressbar" in self_args.keys():
+        if isinstance(self_args['progressbar'], QProgressBar):
+            self_args['progressbar'].setValue(0)
+            self_args['progressbar'].setMaximum(table.rowCount())
+            self_args['progressbar'].setFormat("Werte dekodieren ... %p%")
+            flag_progbar = True
+
     for i in range(0, table.rowCount()):
+        if flag_progbar:
+            self_args['progressbar'].setValue(i)
         print("i = " + str(i) + "; col_art = " + str(col_art))
         try:
             esf_ = table.item(i, col_art).text()
-        except Exception as err:                  # AttributeError:
+        except Exception as err:  # AttributeError:
             if bd.get_debug(): print("Errormessage in make_table_entries_pretty: " + str(err))
             continue
         if esf_ != "":
-            new_art = df_art.query("esf_kurz == '" + esf_ + "'")['deutsch'].iloc[0]
+            try:
+                new_art = df_art.query("esf_kurz == '" + esf_ + "'")['deutsch'].iloc[0]
+            except IndexError as err:
+                rberi_lib.QMessageBoxB("ok", "Blöder Fehler. Connect to Entwickler :)", "Blöder Fehler!", str(err)).exec()
+                return
         else:
             new_art = ""
-        ringer_ = table.item(i, col_ringer).text()
-        new_name_df = df_ringer.query("ringer_new == '" + ringer_ + "'")
-        new_name = new_name_df['nachname'].iloc[0] + ", " + new_name_df['vorname'].iloc[0]
         table.setItem(i, col_art, QTableWidgetItem(new_art))
-        table.setItem(i, col_ringer, QTableWidgetItem(new_name))
-
+        if col_ringer < 1000:
+            ringer_ = table.item(i, col_ringer).text()
+            new_name_df = df_ringer.query("ringer_new == '" + ringer_ + "'")
+            new_name = new_name_df['nachname'].iloc[0] + ", " + new_name_df['vorname'].iloc[0]
+            table.setItem(i, col_ringer, QTableWidgetItem(new_name))
+    if flag_progbar:
+        self_args['progressbar'].setValue(self_args['progressbar'].maximum())
 
 
 def write_df_to_qtable(df_to_integrate: pd.DataFrame, table: QTableWidget, *args, **kwargs):
@@ -6982,6 +7182,8 @@ def write_df_to_qtable(df_to_integrate: pd.DataFrame, table: QTableWidget, *args
     if operation == 'new':
         headers = list(df_to_integrate)
         headers = list(map(str.capitalize, headers))
+        headers = ["Innenfuß" if x == "Frei2" else x for x in headers]
+        headers = ["Kerbe" if x == "Frei4" else x for x in headers]
         table.clear()
         table.setSortingEnabled(False)
         table.setRowCount(df_to_integrate.shape[0])
@@ -7002,16 +7204,34 @@ def write_df_to_qtable(df_to_integrate: pd.DataFrame, table: QTableWidget, *args
 
     df_array = df_to_integrate.values
 
+    frame = 0
+    flag_progbar = False
+    if "progressbar" in m2m.keys():
+        if isinstance(m2m['progressbar'], QProgressBar):
+            m2m['progressbar'].setValue(0)
+            m2m['progressbar'].setMaximum(df_to_integrate.shape[0])
+            m2m['progressbar'].setFormat("Sammle Daten ... %p%")
+            flag_progbar = True
+
     for row in range(df_to_integrate.shape[0]):
+        if flag_progbar:
+            m2m['progressbar'].setValue(row)
         try:
             art_esw = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['deutsch'].iloc[0]
         except Exception:
             art_esw = "DEFEKT"
         try:
             ringer = (df_ringer.query("ringer_new == '" + df_array[row, 5] + "'")['nachname'].iloc[0] + ", " +
-                  df_ringer.query("ringer_new == '" + df_array[row, 5] + "'")['vorname'].iloc[0])
+                      df_ringer.query("ringer_new == '" + df_array[row, 5] + "'")['vorname'].iloc[0])
         except Exception:
             ringer = ""
+
+        teilfeder_mw = 0
+        teilfeder_stdab = 0
+        wing_mw = 0
+        wing_stdab = 0
+        masse_mw = 0
+        masse_stdab = 0
 
         if art_esw != "DEFEKT":
             teilfeder_mw = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['f_ex'].iloc[0]
@@ -7046,11 +7266,11 @@ def write_df_to_qtable(df_to_integrate: pd.DataFrame, table: QTableWidget, *args
 
         for col in range(df_to_integrate.shape[1]):
             item2add = QTableWidgetItem(str(df_array[row, col]))
-            match col:
+            """ match col:
                 case 1:
-                    item2add.setToolTip(art_esw)
+                    # item2add.setToolTip(art_esw)
                 case 5:
-                    item2add.setToolTip(ringer)
+                    # item2add.setToolTip(ringer)
                 case 15:
                     item2add.setToolTip(str("{:.1f}".format(teilfeder_mw_float - faktor * teilfeder_stdab_float)) + " --- " +
                                         str("{:.1f}".format(teilfeder_mw_float)) + " --- " +
@@ -7063,6 +7283,7 @@ def write_df_to_qtable(df_to_integrate: pd.DataFrame, table: QTableWidget, *args
                     item2add.setToolTip(str("{:.1f}".format(masse_mw_float - faktor * masse_stdab_float)) + " --- " +
                                         str("{:.1f}".format(masse_mw_float)) + " --- " +
                                         str("{:.1f}".format(masse_mw_float + faktor * masse_stdab_float)))
+            """
 
             table.setItem(row + row_offset, col, item2add)
             if col_to_mark and col == col_to_mark:
@@ -7077,17 +7298,23 @@ def write_df_to_qtable(df_to_integrate: pd.DataFrame, table: QTableWidget, *args
                 font.setItalic(True)
                 font.setUnderline(True)
                 table.item(row + row_offset, col).setFont(font)
-                # item2add.setBackground(QColor("yellow"))
-                # item2add.setForeground(QColor("red"))
+    if flag_progbar:
+        m2m['progressbar'].setValue(m2m['progressbar'].maximum())
+        # item2add.setBackground(QColor("yellow"))
+        # item2add.setForeground(QColor("red"))
 
-    if m2m != {}:
+    if m2m != {} and ("progressbar" not in m2m.keys()):
         for row in range(row_offset, table.rowCount()):
+            esfid = 0
             try:
                 esfid = int(table.item(row, 37).text())
-            except ValueError:
-                rberi_lib.QMessageBoxB('ok', 'Die ESF-ID wurde nicht gefunden. Ganz schlecht. Entwickler kontaktieren!',
+            except Exception as err:
+                if err == ValueError:
+                    rberi_lib.QMessageBoxB('ok', 'Die ESF-ID wurde nicht gefunden. Ganz schlecht. Entwickler kontaktieren!',
                                        'BÖSER FEHLER', qss=bd.get_qss()).exec_()
-                return
+                    return
+                elif err == AttributeError:
+                    return
 
             if esfid in m2m.keys():
                 for col_to_mark in m2m[esfid]:

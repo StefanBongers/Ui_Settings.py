@@ -541,6 +541,21 @@
    </item>
   </layout>
  </widget>
+ <tabstops>
+  <tabstop>DE_start</tabstop>
+  <tabstop>DE_end</tabstop>
+  <tabstop>BTN_search</tabstop>
+  <tabstop>INP_ringnb</tabstop>
+  <tabstop>CMB_art</tabstop>
+  <tabstop>CHB_rel_col</tabstop>
+  <tabstop>BTN_fehlerliste</tabstop>
+  <tabstop>BTN_fehlerliste_wiederfang</tabstop>
+  <tabstop>BTN_save</tabstop>
+  <tabstop>BTN_cancel</tabstop>
+  <tabstop>BTN_export</tabstop>
+  <tabstop>BTN_import</tabstop>
+  <tabstop>TBL_results</tabstop>
+ </tabstops>
  <resources/>
  <connections/>
 </ui>

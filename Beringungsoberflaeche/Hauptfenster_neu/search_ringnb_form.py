@@ -221,6 +221,18 @@ class Ui_Form(object):
 
         self.retranslateUi(Form)
         QtCore.QMetaObject.connectSlotsByName(Form)
+        Form.setTabOrder(self.DE_start, self.DE_end)
+        Form.setTabOrder(self.DE_end, self.BTN_search)
+        Form.setTabOrder(self.BTN_search, self.INP_ringnb)
+        Form.setTabOrder(self.INP_ringnb, self.CMB_art)
+        Form.setTabOrder(self.CMB_art, self.CHB_rel_col)
+        Form.setTabOrder(self.CHB_rel_col, self.BTN_fehlerliste)
+        Form.setTabOrder(self.BTN_fehlerliste, self.BTN_fehlerliste_wiederfang)
+        Form.setTabOrder(self.BTN_fehlerliste_wiederfang, self.BTN_save)
+        Form.setTabOrder(self.BTN_save, self.BTN_cancel)
+        Form.setTabOrder(self.BTN_cancel, self.BTN_export)
+        Form.setTabOrder(self.BTN_export, self.BTN_import)
+        Form.setTabOrder(self.BTN_import, self.TBL_results)
 
     def retranslateUi(self, Form):
         _translate = QtCore.QCoreApplication.translate

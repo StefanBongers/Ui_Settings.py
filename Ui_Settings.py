@@ -26,6 +26,22 @@ class Ui_Settings(QDialog):
         self.path = None
         self._qss_path = None
 
+        self.key = ""
+        self.BilderPfad = ""
+        self.hilfeBilderPfad = ""
+        self.debug = ""
+        self.mit_anmeldung = ""
+        self.tbl_name_ringserie = ""
+        self.age_adult_allowed = ""
+        self.zoom_seitenbreite = ""
+        self.version = ""
+        self.kontaktdaten = ""
+        self.mariabackuppath = ""
+        self.hinweis = ""
+        self.drucker_vendor_id = ""
+        self.drucker_typ_id = ""
+        self.usb_vol_name = ""
+
         self.ui.BTN_save.clicked.connect(self._save_clicked)
         self.ui.BTN_close.clicked.connect(self._close_clicked)
         self.ui.BTN_help_host.clicked.connect(lambda: self._help_clicked("host"))
@@ -53,6 +69,7 @@ class Ui_Settings(QDialog):
     def __getSettings(self):
         file = open('basic_definitions.ini', 'r')
         content = file.readlines()
+
         for l in content:
             if "self.DB_host" in l:
                 host = l[l.find("=") + 1:].strip()
@@ -116,7 +133,7 @@ class Ui_Settings(QDialog):
             elif "self.mariabackuppath" in l:
                 txt = l[l.find("=") + 1:].strip()
                 self.mariabackuppath = txt
-            elif "// Hinweis" in l:
+            elif "self.HINWEIS" in l:
                 txt = l[l.find("=") + 1:].strip()
                 self.hinweis = txt
             elif "self.drucker_vendor_id" in l:
@@ -160,6 +177,7 @@ class Ui_Settings(QDialog):
 
         try:
             msg_txt = ""
+            ringnr_num = 0
             if self.ui.INP_ringnr_laenge.text():
                 ringnr_num = int(self.ui.INP_ringnr_laenge.text())
             if ringnr_num < 8:
@@ -224,7 +242,7 @@ class Ui_Settings(QDialog):
         new_content.append(txt)
         txt = "self.mariabackuppath=" + str(self.mariabackuppath) + "\n"
         new_content.append(txt)
-        txt = "// Hinweis " + str(self.hinweis) + "\n"
+        txt = "self.HINWEIS=" + str(self.hinweis) + "\n"
         new_content.append(txt)
         txt = "self.drucker_vendor_id=" + str(self.drucker_vendor_id) + "\n"
         new_content.append(txt)
@@ -243,8 +261,6 @@ class Ui_Settings(QDialog):
             df_zentralen = pd.read_sql("SELECT * FROM zentralen", self.mariaDB_engine)
             stations_name = self.ui.CMB_Station.currentText()
             zentrale_name = self.ui.CMB_Zentrale.currentText()
-            # bilder_dir = self.ui.INP_bilder_dir.text()
-            # print(f"Bilder_dir = {bilder_dir} \nINP_text = {self.ui.INP_bilder_dir.text()}\nPath(INP_text) = {Path(self.ui.INP_bilder_dir.text())}")
             stations_sec_key = 1
             zentrale_sec_key = 1
 
@@ -425,8 +441,3 @@ class Ui_Settings(QDialog):
                                           3000)
             cv2.destroyAllWindows()
 
-
-'''app = QApplication(sys.argv)
-window = Ui_Settings()
-window.show()
-sys.exit(app.exec_())'''
