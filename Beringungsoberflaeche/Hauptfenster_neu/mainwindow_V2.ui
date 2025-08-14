@@ -52,20 +52,20 @@
          <item>
           <widget class="QLabel" name="label_24">
            <property name="sizePolicy">
-            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+            <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
              <horstretch>0</horstretch>
              <verstretch>0</verstretch>
             </sizepolicy>
            </property>
            <property name="minimumSize">
             <size>
-             <width>250</width>
+             <width>0</width>
              <height>0</height>
             </size>
            </property>
            <property name="maximumSize">
             <size>
-             <width>270</width>
+             <width>5000</width>
              <height>25</height>
             </size>
            </property>
@@ -75,7 +75,7 @@
             </font>
            </property>
            <property name="text">
-            <string>Letzte Beringer (Doppelklick):</string>
+            <string>Letzte Beringer:innen (Doppelklick):</string>
            </property>
           </widget>
          </item>
@@ -410,6 +410,9 @@
                <pointsize>16</pointsize>
               </font>
              </property>
+             <property name="toolTip">
+              <string/>
+             </property>
             </widget>
            </item>
            <item>
@@ -466,6 +469,9 @@
                <pointsize>16</pointsize>
               </font>
              </property>
+             <property name="toolTip">
+              <string/>
+             </property>
             </widget>
            </item>
            <item>
@@ -520,6 +526,9 @@
              <pointsize>16</pointsize>
             </font>
            </property>
+           <property name="toolTip">
+            <string>Rechtsklick auf Auswahlfeld zeigt Hilfe...</string>
+           </property>
            <property name="text">
             <string>Handschwingenmauser:</string>
            </property>
@@ -553,6 +562,9 @@
              <pointsize>16</pointsize>
             </font>
            </property>
+           <property name="toolTip">
+            <string>Rechtsklick auf Auswahlfeld zeigt Hilfe...</string>
+           </property>
            <property name="editable">
             <bool>false</bool>
            </property>
@@ -585,6 +597,9 @@
             <font>
              <pointsize>16</pointsize>
             </font>
+           </property>
+           <property name="toolTip">
+            <string>Rechtsklick auf Auswahlfeld zeigt Hilfe...</string>
            </property>
            <property name="text">
             <string>Flügellänge:</string>
@@ -652,6 +667,9 @@
              <pointsize>16</pointsize>
             </font>
            </property>
+           <property name="toolTip">
+            <string>Rechtsklick auf Auswahlfeld zeigt Hilfe...</string>
+           </property>
            <property name="editable">
             <bool>false</bool>
            </property>
@@ -718,6 +736,9 @@
              <pointsize>16</pointsize>
             </font>
            </property>
+           <property name="toolTip">
+            <string/>
+           </property>
            <property name="text">
             <string>Gewicht:</string>
            </property>
@@ -751,6 +772,9 @@
              <pointsize>16</pointsize>
             </font>
            </property>
+           <property name="toolTip">
+            <string/>
+           </property>
            <property name="text">
             <string>Innenfuß:</string>
            </property>
@@ -783,6 +807,9 @@
             <font>
              <pointsize>16</pointsize>
             </font>
+           </property>
+           <property name="toolTip">
+            <string>Rechtsklick auf Auswahlfeld zeigt Hilfe...</string>
            </property>
            <property name="text">
             <string>Alter:</string>
@@ -820,6 +847,9 @@
            <property name="contextMenuPolicy">
             <enum>Qt::NoContextMenu</enum>
            </property>
+           <property name="toolTip">
+            <string>Rechtsklick auf Auswahlfeld zeigt Hilfe...</string>
+           </property>
            <property name="editable">
             <bool>false</bool>
            </property>
@@ -853,6 +883,9 @@
              <pointsize>16</pointsize>
             </font>
            </property>
+           <property name="toolTip">
+            <string>Rechtsklick auf Auswahlfeld zeigt Hilfe...</string>
+           </property>
            <property name="editable">
             <bool>false</bool>
            </property>
@@ -885,6 +918,9 @@
             <font>
              <pointsize>16</pointsize>
             </font>
+           </property>
+           <property name="toolTip">
+            <string>Rechtsklick auf Auswahlfeld zeigt Hilfe...</string>
            </property>
            <property name="editable">
             <bool>false</bool>
@@ -920,6 +956,9 @@
               <font>
                <pointsize>16</pointsize>
               </font>
+             </property>
+             <property name="toolTip">
+              <string>Rechtsklick auf Auswahlfeld zeigt Hilfe...</string>
              </property>
             </widget>
            </item>
@@ -979,7 +1018,7 @@
             <enum>Qt::ActionsContextMenu</enum>
            </property>
            <property name="toolTip">
-            <string notr="true"/>
+            <string notr="true">Rechtsklick auf Auswahlfeld zeigt Hilfe...</string>
            </property>
            <property name="text">
             <string>Geschlecht:</string>
@@ -1013,6 +1052,9 @@
             <font>
              <pointsize>16</pointsize>
             </font>
+           </property>
+           <property name="toolTip">
+            <string>Rechtsklick auf Auswahlfeld zeigt Hilfe...</string>
            </property>
            <property name="editable">
             <bool>false</bool>
@@ -1050,6 +1092,9 @@
              <pointsize>16</pointsize>
             </font>
            </property>
+           <property name="toolTip">
+            <string/>
+           </property>
            <property name="text">
             <string>Innenkerbe HS2:</string>
            </property>
@@ -1082,6 +1127,9 @@
             <font>
              <pointsize>16</pointsize>
             </font>
+           </property>
+           <property name="toolTip">
+            <string>Rechtsklick auf Auswahlfeld zeigt Hilfe...</string>
            </property>
            <property name="text">
             <string>Teilfeder:</string>
@@ -1116,6 +1164,9 @@
              <pointsize>16</pointsize>
             </font>
            </property>
+           <property name="toolTip">
+            <string>Rechtsklick auf Auswahlfeld zeigt Hilfe...</string>
+           </property>
            <property name="text">
             <string>Muskel:</string>
            </property>
@@ -1148,6 +1199,9 @@
             <font>
              <pointsize>16</pointsize>
             </font>
+           </property>
+           <property name="toolTip">
+            <string>Rechtsklick auf Auswahlfeld zeigt Hilfe...</string>
            </property>
            <property name="text">
             <string>Kleingefiedermauser:</string>
@@ -1209,6 +1263,9 @@
              <pointsize>16</pointsize>
             </font>
            </property>
+           <property name="toolTip">
+            <string>Rechtsklick auf Auswahlfeld zeigt Hilfe...</string>
+           </property>
            <property name="editable">
             <bool>false</bool>
            </property>
@@ -1241,6 +1298,9 @@
             <font>
              <pointsize>16</pointsize>
             </font>
+           </property>
+           <property name="toolTip">
+            <string>Rechtsklick auf Auswahlfeld zeigt Hilfe...</string>
            </property>
            <property name="text">
             <string>Mauserfortschritt:</string>
@@ -1276,6 +1336,9 @@
               <font>
                <pointsize>16</pointsize>
               </font>
+             </property>
+             <property name="toolTip">
+              <string/>
              </property>
              <property name="alignment">
               <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
@@ -1350,6 +1413,9 @@
              <pointsize>16</pointsize>
             </font>
            </property>
+           <property name="toolTip">
+            <string>Rechtsklick auf Auswahlfeld zeigt Hilfe...</string>
+           </property>
            <property name="layoutDirection">
             <enum>Qt::LeftToRight</enum>
            </property>
@@ -1393,6 +1459,9 @@
               <font>
                <pointsize>16</pointsize>
               </font>
+             </property>
+             <property name="toolTip">
+              <string>Rechtsklick auf Auswahlfeld zeigt Hilfe...</string>
              </property>
              <property name="text">
               <string/>
@@ -1808,7 +1877,7 @@
          <item row="0" column="13">
           <widget class="QLabel" name="label_17">
            <property name="sizePolicy">
-            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
              <horstretch>0</horstretch>
              <verstretch>0</verstretch>
             </sizepolicy>
@@ -1821,7 +1890,7 @@
            </property>
            <property name="maximumSize">
             <size>
-             <width>170</width>
+             <width>11111111</width>
              <height>25</height>
             </size>
            </property>
@@ -1831,7 +1900,7 @@
             </font>
            </property>
            <property name="text">
-            <string>Beringer (Strg+B):</string>
+            <string>Beringer:in (Strg+B):</string>
            </property>
           </widget>
          </item>
@@ -2298,7 +2367,7 @@
          <item row="2" column="13">
           <widget class="QPushButton" name="BTN_ringer_nicht_gefunden">
            <property name="sizePolicy">
-            <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
              <horstretch>0</horstretch>
              <verstretch>0</verstretch>
             </sizepolicy>
@@ -2311,7 +2380,7 @@
            </property>
            <property name="maximumSize">
             <size>
-             <width>270</width>
+             <width>500</width>
              <height>35</height>
             </size>
            </property>
@@ -2324,7 +2393,7 @@
             <string>Sollte die gesuchte Person im Beringer-DropDown nicht zu finden sein, bitte für das aktuelle Jahr aktivieren (über diesen Button)</string>
            </property>
            <property name="text">
-            <string>Beringer nicht gefunden?</string>
+            <string>Beringer:in nicht gefunden?</string>
            </property>
           </widget>
          </item>
@@ -2559,12 +2628,7 @@
     </property>
     <addaction name="actionHinzufuegen"/>
     <addaction name="separator"/>
-    <addaction name="actionSuchen"/>
-    <addaction name="actionEintrag_suchen"/>
     <addaction name="separator"/>
-    <addaction name="actionWiederfang_Ranking"/>
-    <addaction name="actionNetzfach_Auswertung"/>
-    <addaction name="actionSQL_Befehl"/>
    </widget>
    <widget class="QMenu" name="menuVerwaltung">
     <property name="font">
@@ -2619,15 +2683,28 @@
      </font>
     </property>
     <property name="title">
-     <string>Anzeige</string>
+     <string>A&amp;nzeige</string>
     </property>
     <addaction name="actionThemen"/>
     <addaction name="separator"/>
     <addaction name="actionGrosse_Schrift"/>
     <addaction name="actionKleine_Schrift"/>
    </widget>
+   <widget class="QMenu" name="menuAuswertung">
+    <property name="title">
+     <string>&amp;Auswertung</string>
+    </property>
+    <addaction name="actionSuchen"/>
+    <addaction name="actionEintrag_suchen"/>
+    <addaction name="separator"/>
+    <addaction name="actionWiederfang_Ranking"/>
+    <addaction name="actionNetzfach_Auswertung"/>
+    <addaction name="separator"/>
+    <addaction name="actionSQL_Befehl"/>
+   </widget>
    <addaction name="menuDatei"/>
    <addaction name="menuEingabe"/>
+   <addaction name="menuAuswertung"/>
    <addaction name="menuVerwaltung"/>
    <addaction name="menuAnzeige"/>
    <addaction name="menuHilfe"/>
@@ -2702,6 +2779,9 @@
      <pointsize>14</pointsize>
      <bold>true</bold>
     </font>
+   </property>
+   <property name="shortcut">
+    <string>Esc</string>
    </property>
   </action>
   <action name="actionEinstellungen">
@@ -2891,6 +2971,11 @@
    <property name="text">
     <string>SQL Befehl</string>
    </property>
+   <property name="font">
+    <font>
+     <pointsize>14</pointsize>
+    </font>
+   </property>
   </action>
   <action name="actionTagebucheintrag">
    <property name="text">
@@ -2906,11 +2991,11 @@
   </customwidget>
  </customwidgets>
  <tabstops>
+  <tabstop>CMB_art</tabstop>
   <tabstop>CMB_fangart</tabstop>
   <tabstop>INP_ringnummer</tabstop>
   <tabstop>CMB_netz</tabstop>
   <tabstop>CMB_fach</tabstop>
-  <tabstop>CMB_beringer</tabstop>
   <tabstop>CMB_fett</tabstop>
   <tabstop>CMB_muskel</tabstop>
   <tabstop>CMB_alter</tabstop>
@@ -2945,7 +3030,7 @@
   <tabstop>BTN_bearb_beenden</tabstop>
   <tabstop>BTN_schliessen</tabstop>
   <tabstop>CHB_schnellauswahl</tabstop>
-  <tabstop>CMB_art</tabstop>
+  <tabstop>CMB_beringer</tabstop>
  </tabstops>
  <resources/>
  <connections>

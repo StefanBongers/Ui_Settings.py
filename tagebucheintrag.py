@@ -5,7 +5,7 @@ import pandas as pd
 from PyQt5.QtCore import QDateTime
 
 import rberi_lib
-from PyQt5.QtWidgets import QDialog
+from PyQt5.QtWidgets import QDialog, QMessageBox
 from Beringungsoberflaeche.tagebucheintrag import Ui_Dialog
 
 
@@ -19,6 +19,7 @@ class Tagebucheintrag(QDialog):
         self.debug = debug
         self.user = current_user
         self.df_ringer = pd.DataFrame()
+        self.saved = False
 
         self.ui.DTE_zeitstempel.setDateTime(QDateTime.currentDateTime())
 
@@ -53,6 +54,8 @@ class Tagebucheintrag(QDialog):
             cursor.execute(sql_text)
             self.engine.commit()
             cursor.close()
+            self.saved = True
+            self.close()
         except Exception as err:
             rberi_lib.QMessageBoxB('ok', 'Datensatz konnte nicht gespeichert werden. Schwerer Ausnahmefehler! Siehe '
                                          'Details!', 'Ausnahmefehler', str(err)).exec_()
@@ -63,11 +66,11 @@ class Tagebucheintrag(QDialog):
         names = name.split(',')
         nachname = names[0].strip()
         vorname = names[1].strip()
-
         return_value = self.df_ringer.query("nachname == @nachname & vorname == @vorname")['ringer_new'].iloc[0]
         return return_value
 
-
-
-
-
+    def close(self):
+        if not self.saved:
+            if rberi_lib.QMessageBoxB('yn', 'Vorher speichern?', 'Speichern?').exec_() == QMessageBox.Yes:
+                self.save()
+        super().close()

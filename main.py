@@ -61,6 +61,7 @@ from Ui_Settings import Ui_Settings
 from netzfachauswertung import Netzfach_Auswertung
 from sql_command import SQL_command
 from tagebucheintrag import Tagebucheintrag
+from tipsDialog import TipsDialog
 
 matplotlib.use('Qt5Agg')
 
@@ -354,6 +355,7 @@ class Backup_GUI(QDialog):
             if disk.VolumeName is not None:
                 if bd.get_usb_vol_name() in disk.VolumeName.lower():
                     self.laufwerk = str(disk.Caption)
+                    print("self.laufwerk = " + self.laufwerk) if bd.get_debug() else None
             else:
                 continue
 
@@ -371,6 +373,8 @@ class Backup_GUI(QDialog):
             rberi_lib.QMessageBoxB("ok", "Laufwerk '" + self.laufwerk + chr(92) + "' nicht gefunden.", "Laufwerkfehler",
                                    qss=bd.get_qss()).exec_()
             return
+        for el in os.listdir(self.laufwerk):
+            print("Gefundenes Verzeichnis: " + el) if bd.get_debug() else None
         if heutiger_wochentag in os.listdir(self.laufwerk):
             backup_dir = self.laufwerk + chr(92) + heutiger_wochentag
         else:
@@ -420,10 +424,10 @@ class Backup_GUI(QDialog):
         if self.monitor is not None:
             self.monitor.stop_monitoring()
 
-    def accept(self):
+    def close(self):
         if self.monitor is not None:
             self.monitor.stop_monitoring()
-        super().accept()
+        super().close()
 
     def backup_clicked(self):
         self.info.addItem(QListWidgetItem('Starte Backup-Prozedere ... '))
@@ -454,7 +458,7 @@ class Backup_GUI(QDialog):
                             loop.exec_()
             except Exception as excp:
                 rberi_lib.QMessageBoxB('ok', 'Datenbanksicherung fehlgeschlagen. Siehe Details.', 'Datenbankfehler',
-                                       str(excp), qss=bd.get_qss(), ).exec_()
+                                       str(excp), qss=bd.get_qss()).exec_()
                 return
         else:
             rberi_lib.QMessageBoxB('ok', 'Das Backup kann nicht erzeugt werden. Grund ist unbekannt. Der Befehl ist Null. '
@@ -476,13 +480,15 @@ class Backup_GUI(QDialog):
         loop = QEventLoop()
         QTimer.singleShot(1000, loop.quit)
         loop.exec_()
-        self.accept()
+        self.close()
 
     def check_usb_drive(self) -> bool:
         c = wmi.WMI()
+        print ("USB-Gerät-Name erwartet (aus .ini) = " + bd.get_usb_vol_name()) if bd.get_debug() else None
         for disk in c.Win32_LogicalDisk(DriveType=2):
+            print("Speichermediumname = " + disk.VolumeName) if bd.get_debug() else None
             if disk.VolumeName is not None:
-                if bd.get_usb_vol_name() in disk.VolumeName.lower():
+                if bd.get_usb_vol_name().lower() in disk.VolumeName.lower():
                     self.laufwerk = disk.Caption + chr(92)
                     answ = rberi_lib.QMessageBoxB('ync', 'Speichermedium "' + disk.VolumeName + '" in "' + disk.Caption +
                                                   '" gefunden. Backup starten?', "Info", qss=bd.get_qss()).exec_()
@@ -769,16 +775,21 @@ class CurrentUser:
     def __init__(self):
         self.user = ""
         self.lvl = 1
+        self.tips = 'Y'
 
-    def set(self, u='reit', lvl=1):
+    def set(self, u='reit', lvl=1, tips='Y'):
         self.user = u
         self.lvl = lvl
+        self.tips = tips
 
     def getuser(self) -> str:
         return self.user
 
     def getlevel(self) -> int:
         return int(self.lvl)
+
+    def gettips(self) -> bool:
+        return True if self.tips == 'Y' else False
 
 
 class Kontakt_Menu_GUI(QDialog):
@@ -1061,6 +1072,7 @@ class Loginpage(QtWidgets.QDialog):
         token_ = f_.decrypt(password[0])
         pw_ = token_.decode()
         u_level = self.df_user.level[user_index].tolist()[0]
+        u_tips = self.df_user.tips[user_index].tolist()[0]
         add_text = ""
 
         if str(self.user_pwd.text()) == str(pw_):
@@ -1071,7 +1083,7 @@ class Loginpage(QtWidgets.QDialog):
                 add_text = str(self.count_login) + " erfolglose Anmeldeversuche!"
 
             logging(self.user_obj.currentText(), datetime.now(), "login", add_text)
-            self.u.set(self.user_obj.currentText(), u_level)
+            self.u.set(self.user_obj.currentText(), u_level, u_tips)
             self.accept()
         else:
             self.count_login += 1
@@ -1085,7 +1097,8 @@ class Loginpage(QtWidgets.QDialog):
         logging(username, datetime.now(), "login", add_text)
         user_index = self.df_user.index[(self.df_user["username"] == self.user_obj.currentText())]
         u_level = self.df_user.level[user_index].tolist()[0]
-        self.u.set(self.user_obj.currentText(), u_level)
+        u_tips = self.df_user.tips[user_index].tolist()[0]
+        self.u.set(self.user_obj.currentText(), u_level, u_tips)
         self.accept()
 
 
@@ -2109,6 +2122,18 @@ class _UiSearch(QWidget):
             print(f"PRGB_dav.maximum = {self.search_ui.PRGB_dav.maximum()}, anzahl topLevelItem ="
                   f"{self.search_ui.TREE_arten.topLevelItemCount()}")
             print(f"ergibt frame = {self.search_ui.PRGB_dav.maximum() / self.search_ui.TREE_arten.topLevelItemCount()}")
+
+        # bisher wird die Uhrzeit noch nicht betrachtet. Hier erden nun für die beiden Randtage die überschüssigen Uhrzeiten
+        # entfernt.
+        try:
+            df.drop(df[(df['datum'] == self.search_ui.DTE_von.date()) & (df['uhrzeit'] < self.search_ui.DTE_von.time().hour())].index,inplace=True)
+            df.drop(df[(df['datum'] == self.search_ui.DTE_bis.date()) & (df['uhrzeit'] > self.search_ui.DTE_bis.time().hour())].index,inplace=True)
+        except Exception as err:
+            rberi_lib.QMessageBoxB('ok', 'Fehler bei der Eliminierung von Daten außerhalb der Stundengrenze. '
+                                         'Stattdessen werden die beiden Datumswerte als Grenzwerte für die Abfrage genutzt.',
+                                   'Interner Fehler', str(err), qss=bd.get_qss()).exec_()
+
+        # jetzt wird der ergebnis-df gebastelt...
         self.df_ergebnis = self.__get_complex_df(df,
                                                  self.search_ui.PRGB_dav.maximum() /
                                                  self.search_ui.TREE_arten.topLevelItemCount())
@@ -3624,6 +3649,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.CMB_verletzungscode.setStyleSheet("""
             font-size: 11px;
         """)
+        label_obj = [self.ui.label_25, self.ui.label_26, self.ui.label_28, self.ui.label_27, self.ui.label_34]
+        for obj in label_obj:
+            obj.setStyleSheet("""
+                font-size: 11px;    
+            """)
+
         self.setWindowTitle("Geier")
 
         self.set_user(user_internal)
@@ -3753,6 +3784,15 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.shortcut1 = QShortcut(QtGui.QKeySequence("Ctrl+B"), self.ui.CMB_beringer)
         self.shortcut1.activated.connect(self.ui.CMB_beringer.setFocus)
+
+        self.shortcut2 = QShortcut(QtGui.QKeySequence("Ctrl+T"), self)
+        self.shortcut2.activated.connect(self.testdatensatz)
+
+        self.shortcut3 = QShortcut(QtGui.QKeySequence("Ctrl+Alt+L"), self)
+        self.shortcut3.activated.connect(lambda: rberi_lib.QMessageBoxB("ok", 'Hallo Lena! Willkommen auf der Reit! Habe Spaß '
+                                                                               'und ein paar nette Fänge! LG, Stefan.',
+                                                                         "Lena welcome!", "Details bleiben privat!",
+                                                                         qss=bd.get_qss()).exec())
 
         # Alle Aktionen für Button-Clicks
         self.ui.BTN_bearb_beenden.clicked.connect(self.edit_beenden)
@@ -4108,8 +4148,9 @@ class MainWindow(QtWidgets.QMainWindow):
                                                  f'anpassen. ', 'Eingabefehler', qss=bd.get_qss()).exec_()
                     netz = self.ui.CMB_netz.currentText()
                     fach = self.ui.CMB_fach.currentText()
-                    self.ui.CMB_netz.setCurrentText("0" + netz[0])
-                    self.ui.CMB_fach.setCurrentText(netz[1] + fach.upper())
+                    if len(netz) == 2:
+                        self.ui.CMB_netz.setCurrentText("0" + netz[0])
+                        self.ui.CMB_fach.setCurrentText(netz[1] + fach.upper())
             if source.objectName() == 'CMB_art' and len(self.ui.CMB_art.currentText()) > 0:
                 if self.ui.timeEdit.time().hour() != QTime.currentTime().hour():
                     answer = rberi_lib.QMessageBoxB('ny', 'Zeit aktualisieren für diesen Datensatz?', 'Zeitanpassung',
@@ -4185,7 +4226,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.proof_gauss('gewicht')
 
     def is_rohrsaenger(self):
-        if self.ui.CMB_art.currentText() == "Sumpfrohrsänger" or self.ui.CMB_art.currentText() == "Teichrohrsänger":
+        if (self.ui.CMB_art.currentText().lower() == "sumpfrohrsänger" or self.ui.CMB_art.currentText().lower() ==
+                "teichrohrsänger" or self.ui.CMB_art.currentText().lower() == "sumpfrohrsaenger" or
+                self.ui.CMB_art.currentText().lower() == "teichrohrsaenger"):
             return True
         return False
 
@@ -5686,6 +5729,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def beringer_changed(self):
         cur_ringer = self.ui.CMB_beringer.currentText()
+        self.check_bday()
         if len(cur_ringer) < 2:
             return
         for i in range(0, self.ui.LST_letzte_beringer.count()):
@@ -5709,6 +5753,58 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.ui.LST_letzte_beringer.item(i).setText(self.ui.LST_letzte_beringer.item(i - 1).text())
             self.ui.LST_letzte_beringer.item(0).setText(cur_ringer)
         self.ui.CMB_fett.setFocus(True)
+
+    def check_bday(self):
+        name = self.ui.CMB_beringer.currentText()
+        vorname = name[name.find(",") + 1:].strip()
+        nachname = name[:name.find(",")]
+
+        try:
+            df_ringer = pd.read_sql("SELECT * from ringer where vorname = '" + vorname +
+                                    "' and nachname = '" + nachname + "'", engine)
+            ringer = df_ringer.iloc[0]
+        except Exception as err:
+            if bd.get_debug():
+                print("Beim Lesen des Geburtstags ist ein Fehler aufgetreten: \n")
+                print(str(err))
+                print("------------------------------------------------------")
+            return
+        if (df_ringer.shape[0] == 0) or ('bday' not in df_ringer.columns) or ('bday_done' not in df_ringer.columns):
+            rberi_lib.QMessageBoxB('ok', 'Keine Glückwünsche!', 'Fehler', 'Es müssen die Spalten bday (DATE) und bday_done ('
+                                                                          'YEAR) in der Tabelle ringer vorhanden sein!' ,
+                                   qss=bd.get_qss()).exec_()
+            return
+
+        if bd.get_debug():
+            print('ringer["bday"] = ' + str(ringer['bday']))
+            print('Typ = ' + str(type(ringer['bday'])))
+            print('datetime.today() = ' + str(datetime.today().date()))
+            print("Typ = " + str(type(datetime.today().date())))
+
+        if ringer['bday'] == datetime.today().date():
+            if ringer['bday_done'] != datetime.today().year:
+                rberi_lib.QMessageBoxB('ok', f'Herzlichen Glückwunsch zum Geburtstag, liebe/r {vorname.capitalize()}! Mögen es heute '
+                                             f'besonders viele Fänge und die ein oder andere Seltenheit sein! Lass Dich '
+                                             f'feiern!', 'Happy birthday!', 'Was erwartest Du noch?? Ein Ständchen?? Na gut... '
+                                                                            '\n\n'
+                                                                            'Happy birthday to you!\nHappy birthday to '
+                                                                            'you!\nHappy birthday, dear ' + vorname.capitalize() +
+                                                                            '!!!\nHappy birthday to YOUUUUUUUU!',
+                                       qss=bd.get_qss()).exec_()
+                sql_text = "UPDATE ringer SET bday_done = " + str(datetime.today().date().year) + " WHERE ID_ringer = " + str(
+                    ringer['ID_ringer'])
+                if bd.get_debug():
+                    print("SQl-Text zum ändern des Parameters bday_done in ringer nach Glückwünschen: " + sql_text)
+                try:
+                    cursor = engine.cursor()
+                    cursor.execute(sql_text)
+                    engine.commit()
+                    cursor.close()
+                except Exception as err:
+                    rberi_lib.QMessageBoxB('ok', 'Gratulationsdurchführung konnte nicht gespeichert werden. Bitte '
+                                                 'Feedback/Fehlermeldung absetzen (Hilfe > Feedback) mit Text aus Details! Das '
+                                                 'Speichern des Datensatzes ist kein Problem! '
+                                                 'Danke!', 'Fehler bei Speicherung BDay', str(err), qss=bd.get_qss()).exec_()
 
     def check_for_needed_entries(self, fangart: str = 'xxx'):
         """
@@ -5856,7 +5952,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     self.ui.CMB_sex.setFocus(True)
                     return
         elif self.ui.CMB_fangart.currentText() in ['w', 'k']:
-            if age in ['0', '1', '2', '3', '4', 0, 1, 2, 3, 4]:
+            if age in ['0', '1', '2', '3', '4', '5', 0, 1, 2, 3, 4, 5]:
                 self.ui.CMB_sex.setFocus(True)
                 return
             try:
@@ -6056,7 +6152,10 @@ class MainWindow(QtWidgets.QMainWindow):
                                        f'Ausnahmefällen 5 als Alter zuzulassen. Das korrekte Alter aufgrund des Wiederfangs wäre '
                                        f'"{correct_age}" gewesen. Sei ehrlich, wäre es korrekt gewesen? ',
                                        'Altersbestimmung', qss=bd.get_qss()).exec_()
-                self.ui.CMB_alter.setCurrentText('4')
+                if age == "5":
+                    self.ui.CMB_alter.setCurrentText('5')
+                else:
+                    self.ui.CMB_alter.setCurrentText('4')
                 self.ui.CMB_sex.setFocus(True)
                 return
             else:
@@ -6981,6 +7080,25 @@ class MainWindow(QtWidgets.QMainWindow):
                                           3000)
             cv2.destroyAllWindows()
 
+    def testdatensatz(self):
+        self.ui.CMB_art.setCurrentText("Teichrohrsänger")
+        self.ui.CMB_fangart.setCurrentText("e")
+        self.ui.CMB_netz.setCurrentText("20")
+        self.ui.CMB_fach.setCurrentText("3R")
+        self.ui.CMB_beringer.setCurrentIndex(0)
+        self.ui.CMB_fett.setCurrentText("2")
+        self.ui.CMB_muskel.setCurrentText("2")
+        self.ui.CMB_alter.setCurrentText("3")
+        self.ui.CMB_sex.setCurrentText("0")
+        self.ui.CMB_mauser1.setCurrentText("2")
+        self.ui.CMB_mauser2.setCurrentText("U")
+        self.ui.CMB_mauser3.setCurrentText("1")
+        self.ui.INP_teilfeder.setText("50.0")
+        self.ui.INP_fluegellaenge.setText("65.0")
+        self.ui.INP_teilfeder_2.setText("13.0")
+        self.ui.INP_masse.setText("12.5")
+        self.ui.PTE_bemerkung.setPlainText("Dies ist ein automatisch generierter Testdatensatz")
+
 
 def kerbe(kerbe_val, art_obj, fluegel, alter):
     # 1 = Palustris (Sumpfi)
@@ -7078,9 +7196,10 @@ def kerbe(kerbe_val, art_obj, fluegel, alter):
 
         elif art_winkler == 0:
             rberi_lib.QMessageBoxB('ok', 'Laut der Übersicht Winkler liegt der Vogel im '
-                                         'unbestimmten Bereich. Bitte schaut Euch die Handschwingenunterschiede '
-                                         'der beiden Arten an. Sollte auch dies nicht zur eindeutigen '
-                                         'Bestimmung ausreichen, könnt ihr noch Walinder bemühen.',
+                                         'unbestimmten Bereich.\nBei adulten Individuen kann die Messung des Innenfußes '
+                                         'Klarheit über die Art bringen: größer 26mm ==> Teichrohrsänger, kleiner 26mm ==> '
+                                         'Sumpfrohrsänger.\nWenn das auch nicht '
+                                         'zum Ziel führt, bleibt Euch noch Walinder: (Menü: Hilfe > Walinder).\n\nViel Erfolg!',
                                    'Sumpf/Teich?', qss=bd.get_qss()).exec_()
 
 
@@ -7530,10 +7649,44 @@ if __name__ == '__main__':
                 sys.exit(app.exec_())
             else:
                 if form.exec_() == QtWidgets.QDialog.Accepted:
-                    print(f"current_u = {current_u.getuser()}")
+                    print(f"current_u = {current_u.getuser()}") if bd.get_debug() else None
                     window = MainWindow(current_u)
                     window.showMaximized()
+                    if current_u.gettips():
+                        print("Tipps anzeigen!") if bd.get_debug() else None
+                        try:
+                            df_tips = pd.read_sql("SELECT tip FROM tips", engine)
+                            tipsDialog = TipsDialog(df_tips['tip'].tolist(), bd.get_qss())
+                            answ = tipsDialog.exec_()
+                            print(str(answ)) if bd.get_debug() else None
+                            if not answ:
+                                print("Es sollen keine Tips mehr angezeigt werden .... ") if bd.get_debug() else None
+                                try:
+                                    sql_t = "UPDATE benutzer SET tips = 'N' WHERE username = '" + current_u.getuser() + "'"
+                                    cursor = engine.cursor()
+                                    cursor.execute(sql_t)
+                                    engine.commit()
+                                    cursor.close()
+                                except Exception as err:
+                                    rberi_lib.QMessageBoxB('ok', 'Fehler beim Update der Tipsanzeige.', 'Datenbankfehler',
+                                                           str(err),
+                                                           qss=bd.get_qss()).exec()
+                        except Exception as err:
+                            rberi_lib.QMessageBoxB('ok', 'Keine Tipps gefunden!', 'Datenbankfehler', str(err),
+                                                   qss=bd.get_qss()).exec()
+                    else:
+                        # immer Samstags wird die Einstellung zurück auf 'Y' Tipps anzeigen gestellt.
+                        if date.today().weekday() == 5:
+                            try:
+                                sql_t = "UPDATE benutzer SET tips = 'Y' WHERE username = '" + current_u.getuser() + "'"
+                                cursor = engine.cursor()
+                                cursor.execute(sql_t)
+                                engine.commit()
+                                cursor.close()
+                            except Exception as err:
+                                rberi_lib.QMessageBoxB('ok', 'Fehler beim Update der Tipsanzeige.', 'Datenbankfehler',
+                                                       str(err),
+                                                       qss=bd.get_qss()).exec()
                     sys.exit(app.exec_())
-
     except Exception as e:
         logout(f"schwerwiegender Fehler: {e}")

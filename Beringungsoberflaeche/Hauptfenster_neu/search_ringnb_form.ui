@@ -21,6 +21,11 @@
     <layout class="QGridLayout" name="gridLayout_2">
      <item row="1" column="2">
       <widget class="QLabel" name="label_3">
+       <property name="font">
+        <font>
+         <pointsize>16</pointsize>
+        </font>
+       </property>
        <property name="toolTip">
         <string>Rechtsklick fügt aktuelles Datum ein.</string>
        </property>
@@ -43,10 +48,20 @@
          <height>16777215</height>
         </size>
        </property>
+       <property name="font">
+        <font>
+         <pointsize>16</pointsize>
+        </font>
+       </property>
       </widget>
      </item>
      <item row="1" column="3">
       <widget class="QLabel" name="label_5">
+       <property name="font">
+        <font>
+         <pointsize>16</pointsize>
+        </font>
+       </property>
        <property name="toolTip">
         <string>Rechtsklick fügt aktuelles Datum ein.</string>
        </property>
@@ -65,9 +80,14 @@
        </property>
        <property name="maximumSize">
         <size>
-         <width>200</width>
+         <width>16777215</width>
          <height>16777215</height>
         </size>
+       </property>
+       <property name="font">
+        <font>
+         <pointsize>16</pointsize>
+        </font>
        </property>
        <property name="text">
         <string>Wiederfangfehlerliste</string>
@@ -76,6 +96,11 @@
      </item>
      <item row="1" column="0">
       <widget class="QLabel" name="label">
+       <property name="font">
+        <font>
+         <pointsize>16</pointsize>
+        </font>
+       </property>
        <property name="text">
         <string>Ringnummer:</string>
        </property>
@@ -94,6 +119,11 @@
          <width>100</width>
          <height>16777215</height>
         </size>
+       </property>
+       <property name="font">
+        <font>
+         <pointsize>16</pointsize>
+        </font>
        </property>
       </widget>
      </item>
@@ -117,24 +147,16 @@
          <height>16777215</height>
         </size>
        </property>
+       <property name="font">
+        <font>
+         <pointsize>16</pointsize>
+        </font>
+       </property>
        <property name="editable">
         <bool>true</bool>
        </property>
        <property name="insertPolicy">
         <enum>QComboBox::NoInsert</enum>
-       </property>
-      </widget>
-     </item>
-     <item row="3" column="3">
-      <widget class="QPushButton" name="BTN_search">
-       <property name="maximumSize">
-        <size>
-         <width>200</width>
-         <height>16777215</height>
-        </size>
-       </property>
-       <property name="text">
-        <string>Suchen</string>
        </property>
       </widget>
      </item>
@@ -148,9 +170,14 @@
        </property>
        <property name="maximumSize">
         <size>
-         <width>200</width>
+         <width>16777215</width>
          <height>16777215</height>
         </size>
+       </property>
+       <property name="font">
+        <font>
+         <pointsize>16</pointsize>
+        </font>
        </property>
        <property name="text">
         <string>Toleranzfehlerliste</string>
@@ -159,6 +186,11 @@
      </item>
      <item row="4" column="0" colspan="7">
       <widget class="QTableWidget" name="TBL_results">
+       <property name="font">
+        <font>
+         <pointsize>16</pointsize>
+        </font>
+       </property>
        <property name="sizeAdjustPolicy">
         <enum>QAbstractScrollArea::AdjustToContents</enum>
        </property>
@@ -377,6 +409,11 @@
          <height>16777215</height>
         </size>
        </property>
+       <property name="font">
+        <font>
+         <pointsize>16</pointsize>
+        </font>
+       </property>
        <property name="text">
         <string>nur relevante Spalten</string>
        </property>
@@ -387,6 +424,11 @@
      </item>
      <item row="1" column="1">
       <widget class="QLabel" name="label_2">
+       <property name="font">
+        <font>
+         <pointsize>16</pointsize>
+        </font>
+       </property>
        <property name="text">
         <string>Art:</string>
        </property>
@@ -406,6 +448,11 @@
          <height>16777215</height>
         </size>
        </property>
+       <property name="font">
+        <font>
+         <pointsize>16</pointsize>
+        </font>
+       </property>
       </widget>
      </item>
      <item row="5" column="2">
@@ -424,9 +471,14 @@
        </property>
        <property name="maximumSize">
         <size>
-         <width>150</width>
-         <height>50</height>
+         <width>16777215</width>
+         <height>16777215</height>
         </size>
+       </property>
+       <property name="font">
+        <font>
+         <pointsize>16</pointsize>
+        </font>
        </property>
        <property name="text">
         <string>Speichern</string>
@@ -443,15 +495,20 @@
        </property>
        <property name="minimumSize">
         <size>
-         <width>150</width>
+         <width>0</width>
          <height>50</height>
         </size>
        </property>
        <property name="maximumSize">
         <size>
-         <width>150</width>
-         <height>50</height>
+         <width>16777215</width>
+         <height>16777215</height>
         </size>
+       </property>
+       <property name="font">
+        <font>
+         <pointsize>16</pointsize>
+        </font>
        </property>
        <property name="text">
         <string>Schließen/Abb.</string>
@@ -474,9 +531,14 @@
        </property>
        <property name="maximumSize">
         <size>
-         <width>150</width>
-         <height>50</height>
+         <width>16777215</width>
+         <height>16777215</height>
         </size>
+       </property>
+       <property name="font">
+        <font>
+         <pointsize>16</pointsize>
+        </font>
        </property>
        <property name="text">
         <string>Export (*.csv)</string>
@@ -499,33 +561,45 @@
        </property>
        <property name="maximumSize">
         <size>
-         <width>150</width>
-         <height>50</height>
+         <width>16777215</width>
+         <height>16777215</height>
         </size>
+       </property>
+       <property name="font">
+        <font>
+         <pointsize>16</pointsize>
+        </font>
        </property>
        <property name="text">
         <string>Import (*.csv)</string>
        </property>
       </widget>
      </item>
-     <item row="3" column="4">
-      <widget class="QLabel" name="LBL_progress">
+     <item row="2" column="4">
+      <widget class="QPushButton" name="BTN_search">
        <property name="maximumSize">
         <size>
          <width>200</width>
          <height>16777215</height>
         </size>
        </property>
-       <property name="text">
-        <string>Fortschritt: </string>
+       <property name="font">
+        <font>
+         <pointsize>16</pointsize>
+        </font>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+       <property name="text">
+        <string>Suchen</string>
        </property>
       </widget>
      </item>
-     <item row="3" column="5" colspan="2">
+     <item row="3" column="0" colspan="7">
       <widget class="QProgressBar" name="progressBar">
+       <property name="font">
+        <font>
+         <pointsize>16</pointsize>
+        </font>
+       </property>
        <property name="maximum">
         <number>1000</number>
        </property>
@@ -544,7 +618,6 @@
  <tabstops>
   <tabstop>DE_start</tabstop>
   <tabstop>DE_end</tabstop>
-  <tabstop>BTN_search</tabstop>
   <tabstop>INP_ringnb</tabstop>
   <tabstop>CMB_art</tabstop>
   <tabstop>CHB_rel_col</tabstop>
