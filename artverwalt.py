@@ -2,11 +2,12 @@
 import datetime
 
 import pandas as pd
+import sqlalchemy as sa
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (QMessageBox, QWidget, QComboBox, QPlainTextEdit, QLineEdit,
                              QCheckBox, QDialog, QVBoxLayout, QPushButton, )
 from typing import Literal
-from mariadb import Connection
+
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
@@ -61,7 +62,7 @@ class DiagWind(QDialog):
 class ToleranzenWindow(QDialog):
     saveSignal = pyqtSignal(dict)
 
-    def __init__(self, df_art: type(pd.DataFrame), engine: Connection, parent=None):
+    def __init__(self, df_art: type(pd.DataFrame), engine: sa.Engine, parent=None):
         QDialog.__init__(self, parent)
         self.ui = Ui_Dialog()
         self.ui.setupUi(self)
@@ -107,8 +108,9 @@ class ToleranzenWindow(QDialog):
         self.ui_diag.figure.clear()
         ax = self.ui_diag.figure.add_subplot(111)
 
-        df_esf_art = pd.read_sql('SELECT teilfeder FROM esf WHERE art = "' + self.df_art['esf_kurz'][0] +
-                                 '" AND teilfeder > 0', self.engine)
+        with self.engine.connect() as local_conn:
+            df_esf_art = pd.read_sql(sa.text('SELECT teilfeder FROM esf WHERE art = "' + self.df_art['esf_kurz'][0] +
+                                             '" AND teilfeder > 0'), local_conn)
         q1 = df_esf_art.quantile(0.25)
         q3 = df_esf_art.quantile(0.75)
         iqr = q3 - q1
@@ -145,7 +147,7 @@ class ToleranzenWindow(QDialog):
                                                                        self.ui.INP_teilfeder_stdab))
         self.ui_diag.exec_()
 
-# alt: 97.1907
+    # alt: 97.1907
 
     def overtake_val(self, i: int, mw: float, obj: QWidget):
         if i == 1:
@@ -157,8 +159,9 @@ class ToleranzenWindow(QDialog):
         self.ui_diag.figure.clear()
         ax = self.ui_diag.figure.add_subplot(111)
 
-        df_esf_art = pd.read_sql('SELECT fluegel FROM esf WHERE art = "' + self.df_art['esf_kurz'][0] +
-                                 '" AND fluegel > 0', self.engine)
+        with self.engine.connect() as local_conn:
+            df_esf_art = pd.read_sql(sa.text('SELECT fluegel FROM esf WHERE art = "' + self.df_art['esf_kurz'][0] +
+                                             '" AND fluegel > 0'), local_conn)
         q1 = df_esf_art.quantile(0.25)
         q3 = df_esf_art.quantile(0.75)
         iqr = q3 - q1
@@ -198,10 +201,10 @@ class ToleranzenWindow(QDialog):
         self.ui_diag.figure.clear()
         ax = self.ui_diag.figure.add_subplot(111)
 
-        df_esf_art = pd.read_sql('SELECT teilfeder, fluegel FROM esf WHERE art = "' + self.df_art['esf_kurz'][0] +
-                                 '" AND fluegel > 0 AND teilfeder > 0', self.engine)
-        df_esf_art_q = df_esf_art['teilfeder']/df_esf_art['fluegel']
-
+        with self.engine.connect() as local_conn:
+            df_esf_art = pd.read_sql(sa.text('SELECT teilfeder, fluegel FROM esf WHERE art = "' + self.df_art['esf_kurz'][0] +
+                                             '" AND fluegel > 0 AND teilfeder > 0'), local_conn)
+        df_esf_art_q = df_esf_art['teilfeder'] / df_esf_art['fluegel']
         q1 = df_esf_art_q.quantile(0.25)
         q3 = df_esf_art_q.quantile(0.75)
         iqr = q3 - q1
@@ -242,8 +245,9 @@ class ToleranzenWindow(QDialog):
         self.ui_diag.figure.clear()
         ax = self.ui_diag.figure.add_subplot(111)
 
-        df_esf_art = pd.read_sql('SELECT gewicht FROM esf WHERE art = "' + self.df_art['esf_kurz'][0] +
-                                 '" AND gewicht > 0', self.engine)
+        with self.engine.connect() as local_conn:
+            df_esf_art = pd.read_sql(sa.text('SELECT gewicht FROM esf WHERE art = "' + self.df_art['esf_kurz'][0] +
+                                             '" AND gewicht > 0'), local_conn)
 
         q1 = df_esf_art.quantile(0.25)
         q3 = df_esf_art.quantile(0.75)
@@ -315,7 +319,7 @@ class ToleranzenWindow(QDialog):
 class ArtverwaltungWindow(QWidget):
     loggingNeeded = pyqtSignal(str, datetime.datetime, str, str)
 
-    def __init__(self, engine: Connection, parent=None):
+    def __init__(self, engine: sa.Engine, parent=None):
         QWidget.__init__(self, parent)
         self.tol_window = None
         self.tolerances = None
@@ -332,7 +336,8 @@ class ArtverwaltungWindow(QWidget):
         self.ui.BTN_toleranzen.setEnabled(False)
 
         if self.engine_connected():
-            self.df_arten = pd.read_sql('SELECT * FROM arten', self.get_engine())
+            with self._engine.connect() as local_conn:
+                self.df_arten = pd.read_sql_query(sa.text('SELECT * FROM arten'), local_conn)
             self.df_arten_sort = self.df_arten.sort_values(by=['deutsch'])
         else:
             rberi_lib.QMessageBoxB('ok', 'Keine Datenbankverbindung.', 'Datenbankfehler').exec_()
@@ -363,8 +368,10 @@ class ArtverwaltungWindow(QWidget):
 
     def engine_connected(self) -> bool:
         try:
-            self._engine.ping()
-        except ConnectionError:
+            with self._engine.connect() as local_conn:
+                local_conn.execute(sa.text("SELECT 1"))
+        except Exception as excp:
+            print(f"Fehlermeldung: {excp}")
             return False
         return True
 
@@ -378,8 +385,9 @@ class ArtverwaltungWindow(QWidget):
         pass
 
     def toleranzen_click(self):
-        df_selected_art = pd.read_sql(
-            'SELECT * FROM arten WHERE deutsch="' + str(self.ui.CMB_arten.currentText()) + '"', self.get_engine())
+        with self._engine.connect() as local_conn:
+            df_selected_art = pd.read_sql_query(sa.text('SELECT * FROM arten WHERE deutsch="' +
+                                                        str(self.ui.CMB_arten.currentText()) + '"'), local_conn)
         if df_selected_art.empty:
             return
 
@@ -398,7 +406,7 @@ class ArtverwaltungWindow(QWidget):
         if not self.set_state_tuple('gleich'):
             self.ui.BTN_save.setEnabled(True)
         self.tolerances = vals
-        
+
     def getTolerances(self):
         """
                 "teilfeder_mw"
@@ -506,7 +514,6 @@ class ArtverwaltungWindow(QWidget):
                 x = really_update.exec_()
                 if x == QMessageBox.Yes:
                     try:
-                        cursor = self.get_engine().cursor()
                         sql_txt = ("UPDATE arten SET deutsch='" + self.ui.INP_ArtD.text() + "', " +
                                    "lateinisch ='" + self.ui.INP_ArtL.text() + "', " +
                                    "englisch ='" + self.ui.INP_ArtE.text() + "', " +
@@ -547,11 +554,12 @@ class ArtverwaltungWindow(QWidget):
                         sql_txt += " "
                         sql_txt += "WHERE deutsch = '" + self.ui.INP_ArtD.text() + "'"
                         print(sql_txt)
-                        cursor.execute(sql_txt)
-                        self.get_engine().commit()
-                        cursor.close()
+                        with self._engine.connect() as local_conn:
+                            local_conn.execute(sa.text(sql_txt))
+                            local_conn.commit()
+
                         self.set_logging(datetime.datetime.now(), "verwaltung",
-                                         "Artverwaltung: '" + self.ui.INP_ArtD.text() + "' wurde geändert.")
+                                         "Artverwaltung: <<" + self.ui.INP_ArtD.text() + ">> wurde geändert.")
                         self.set_bearbeitungsstatus(False)
                         self.clear_artenverwaltung()
                     except Exception as exc:
@@ -563,7 +571,6 @@ class ArtverwaltungWindow(QWidget):
                     return
             else:
                 try:
-                    cursor = self.get_engine().cursor()
                     if self.tolerances:
                         tol_txt_set = (", f_ex, f_s, f_d_neg, f_d_pos, w_ex, w_s, w_d_neg, w_d_pos, quo_f3_flg_ex, "
                                        "quo_f3_flg_s, quo_f3_flg_d_neg, quo_f3_flg_d_pos, show_q_msg, g_ex, g_s, "
@@ -593,26 +600,27 @@ class ArtverwaltungWindow(QWidget):
                     sql_command = ("INSERT INTO arten (deutsch, lateinisch, englisch, esf_kurz, erbe_kurz, prg_art, mri_art, "
                                    "ring_serie, ringtypMaleRef, ringtypFemaleRef, juv_moult, sex_determ, bemerkung, "
                                    "euring" + tol_txt_set + ") VALUES ('" + self.ui.INP_ArtD.text() + "', '" +
-                                    self.ui.INP_ArtL.text() + "', '" +
-                                    self.ui.INP_ArtE.text() + "', '" +
-                                    self.ui.INP_ESF_kurz.text() + "', '" +
-                                    self.ui.INP_erbe_kurz.text() + "', " +
-                                    str(self.ui.CHB_programmart.isChecked()) + ", " +
-                                    str(self.ui.CHB_mriart.isChecked()) +
-                                    ", NULL, " +
-                                    get_ringtypref(self.ui.CMB_ringtyp_male.currentText()) + ", " +
-                                    ringtypfemale + ", " +
-                                    str(self.ui.CHB_juv_mauser.isChecked()) + ", " +
-                                    str(self.ui.CHB_sex_moegl.isChecked()) + ", '" +
-                                    self.ui.INP_Bemerkung.toPlainText() + "', '" +
-                                    self.ui.INP_euring.text() + "'" +
-                                    tol_txt_val + ")")
+                                   self.ui.INP_ArtL.text() + "', '" +
+                                   self.ui.INP_ArtE.text() + "', '" +
+                                   self.ui.INP_ESF_kurz.text() + "', '" +
+                                   self.ui.INP_erbe_kurz.text() + "', " +
+                                   str(self.ui.CHB_programmart.isChecked()) + ", " +
+                                   str(self.ui.CHB_mriart.isChecked()) +
+                                   ", NULL, " +
+                                   get_ringtypref(self.ui.CMB_ringtyp_male.currentText()) + ", " +
+                                   ringtypfemale + ", " +
+                                   str(self.ui.CHB_juv_mauser.isChecked()) + ", " +
+                                   str(self.ui.CHB_sex_moegl.isChecked()) + ", '" +
+                                   self.ui.INP_Bemerkung.toPlainText() + "', '" +
+                                   self.ui.INP_euring.text() + "'" +
+                                   tol_txt_val + ")")
                     print("sql_command = " + sql_command)
-                    cursor.execute(sql_command)
-                    self.get_engine().commit()
-                    cursor.close()
+                    with self._engine.connect() as local_conn:
+                        local_conn.execute(sa.text(sql_command))
+                        local_conn.commit()
+
                     self.set_logging(datetime.datetime.now(), "verwaltung",
-                                     "Artverwaltung: '" + self.ui.INP_ArtD.text() + "' wurde hinzugefügt.")
+                                     "Artverwaltung: <<" + self.ui.INP_ArtD.text() + ">> wurde hinzugefügt.")
                     rberi_lib.QMessageBoxB('ok', "Es wurde erfolgreich ein neuer Datensatz hinzugefügt:\n\n" +
                                            self.ui.INP_ArtD.text() + " (" + self.ui.INP_ArtL.text() + ")",
                                            'Info').exec_()
@@ -706,9 +714,9 @@ class ArtverwaltungWindow(QWidget):
         #            cursor.execute("INSERT INTO ringserie (ringserie, material) VALUES (%s, %s)", (str(art[1][7]),"!"))
         #            engine.commit()
         #    pass
-
-        df_selected_art = pd.read_sql(
-            'SELECT * FROM arten WHERE deutsch="' + str(self.ui.CMB_arten.currentText()) + '"', self.get_engine())
+        with self._engine.connect() as local_conn:
+            df_selected_art = pd.read_sql_query(sa.text('SELECT * FROM arten WHERE deutsch="' +
+                                                        str(self.ui.CMB_arten.currentText()) + '"'), local_conn)
         if df_selected_art.empty:
             return
 
@@ -745,7 +753,8 @@ class ArtverwaltungWindow(QWidget):
         # print(f"fill_values aufgerufen ... {self.counter}. Mal")
 
         if self.ui.CMB_ringtyp_male.count() <= 0:
-            df_ringtypen = pd.read_sql('SELECT * FROM ringtyp', self.get_engine())
+            with self._engine.connect() as local_conn:
+                df_ringtypen = pd.read_sql_query(sa.text('SELECT * FROM ringtyp'), local_conn)
             self.ui.CMB_ringtyp_male.addItem("TypID; Klasse; Material; Durchmesser [mm]")
             self.ui.CMB_ringtyp_female.addItem("TypID; Klasse; Material; Durchmesser [mm]")
             for index, el_series in df_ringtypen.iterrows():
@@ -754,8 +763,9 @@ class ArtverwaltungWindow(QWidget):
                 self.ui.CMB_ringtyp_male.addItem(el_txt)
                 self.ui.CMB_ringtyp_female.addItem(el_txt)
 
-        df_selected_art = pd.read_sql(
-            'SELECT * FROM arten WHERE deutsch="' + str(self.ui.CMB_arten.currentText()) + '"', self.get_engine())
+        with self._engine.connect() as local_conn:
+            df_selected_art = pd.read_sql_query(sa.text('SELECT * FROM arten WHERE deutsch="' +
+                                                        str(self.ui.CMB_arten.currentText()) + '"'), local_conn)
         if len(df_selected_art) > 0:
             typ_male_id = str(df_selected_art["ringtypMaleRef"].iloc[0])
             typ_female_id = str(df_selected_art["ringtypFemaleRef"].iloc[0])
@@ -770,7 +780,6 @@ class ArtverwaltungWindow(QWidget):
                         self.ui.CMB_ringtyp_female.setCurrentIndex(0)
             else:
                 self.ui.CMB_ringtyp_female.setCurrentText(self.ui.CMB_ringtyp_female.itemText(0))
-
 
             """if not isinstance(typ_female_id, type(None)):
                 if typ_female_id != 'None':

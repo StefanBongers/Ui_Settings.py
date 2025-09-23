@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 import datetime
 
-import mariadb
 import numpy as np
 import pandas as pd
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (QDialog, QMessageBox, QTableWidgetItem, QTableWidget, QGridLayout, QPushButton, QHeaderView, )
-from mariadb import Connection
+from PyQt5.QtWidgets import (QDialog, QMessageBox, QTableWidgetItem, QTableWidget, QGridLayout, QPushButton)
+import sqlalchemy as sa
+from sqlalchemy import exc
 
 import rberi_lib
 from basic_definitions import constants
@@ -26,18 +26,18 @@ def write_df_to_qtable(df, table):
             table.setItem(row, col, QTableWidgetItem(str(df_array[row, col])))
 
 
-def check_integrity_ringseries(engine: Connection) -> bool:
+def check_integrity_ringseries(engine: sa.Engine) -> bool:
     try:
-        engine.ping()
-    except Connection.InterfaceError:
-        rberi_lib.QMessageBoxB('ok', 'Keine Datenbankverbindung. Programm endet.', 'Datenbankproblem').exec_()
+        engine.connect()
+    except Exception as fehler:
+        rberi_lib.QMessageBoxB('ok', 'Keine Datenbankverbindung. Programm endet.', 'Datenbankproblem', str(fehler)).exec_()
         return False
-    sql_t = "SELECT ringtypRef, status FROM " + constants().get_tbl_name_ringserie()
+    sql_text = "SELECT ringtypRef, status FROM " + constants().get_tbl_name_ringserie()
     proof_dict = {}
-    engine.reset()  # damit wir sicher die neueste Datenbank haben
+    # damit wir sicher die neueste Datenbank haben
 
     try:
-        df = pd.read_sql(sql_t, engine)
+        df = pd.read_sql_query(sa.text(sql_text), engine.connect())
     except Exception as excp:
         rberi_lib.QMessageBoxB('ok', 'Konnte die Ringserien nicht aus der DB lesen. Siehe Details.',
                                "Fehlermeldung", ['Aus ringserienverwaltung.py / check_integrity_ringseries',
@@ -55,15 +55,15 @@ def check_integrity_ringseries(engine: Connection) -> bool:
     return True
 
 
-def activate_next_package(engine: Connection, ringtypref: int) -> int:
+def activate_next_package(engine: sa.Engine, ringtypref: int) -> int:
     try:
-        engine.ping()
-    except Connection.InterfaceError:
-        return -1
+        engine.connect()
+    except exc.DBAPIError as fehler:
+        print("Connection to database failed: " + str(fehler))
     if ringtypref is None:
         return -1
-    df = pd.read_sql('SELECT ringserieID, paketnummer, status FROM ' + constants().get_tbl_name_ringserie() + ' ' +
-                     'WHERE ' + 'status = 0 and ringtypRef = ' + str(ringtypref), engine)
+    df = pd.read_sql_query(sa.text('SELECT ringserieID, paketnummer, status FROM ' + constants().get_tbl_name_ringserie() + ' ' +
+                                   'WHERE ' + 'status = 0 and ringtypRef = ' + str(ringtypref)), engine.connect())
     if df.empty:
         rberi_lib.QMessageBoxB('ok', f'Es konnte zum Ringtyp "{ringtypref}" kein lagerhaltiges Paket '
                                      'gefunden werden. Ganz schlecht. Stationsleitung und/oder Management informieren!',
@@ -76,10 +76,9 @@ def activate_next_package(engine: Connection, ringtypref: int) -> int:
             sql_t = ('UPDATE ' + constants().get_tbl_name_ringserie() + ' ' +
                      'SET status = 1, letztevergebenenummer = 0 WHERE ringserieID = ' + str(ringserie_id))
             try:
-                cursor = engine.cursor()
-                cursor.execute(sql_t)
-                engine.commit()
-                cursor.close()
+                with engine.connect() as conn:
+                    conn.execute(sa.text(sql_t))
+                    conn.commit()
                 return ringserie_id
             except Exception as excp:
                 rberi_lib.QMessageBoxB('ok', 'Konnte das nächste Ringnummernpaket nicht aktiveren. '
@@ -93,7 +92,7 @@ def activate_next_package(engine: Connection, ringtypref: int) -> int:
             return -1
 
 
-def get_ringtypref(engine: Connection, art: str, sex: int = 1) -> int:
+def get_ringtypref(engine: sa.Engine, art: str, sex: int = 1) -> int:
     """
 
     :param engine:
@@ -107,46 +106,43 @@ def get_ringtypref(engine: Connection, art: str, sex: int = 1) -> int:
     -5 : allgemeiner Fehler
     """
     try:
-        engine.ping()
-    except mariadb.InterfaceError:
-        return -1
-    try:
-        art_df = pd.read_sql("SELECT ringtypMaleRef, ringtypFemaleRef FROM arten WHERE deutsch = '" + art + "'", engine)
+        art_df = pd.read_sql_query(sa.text("SELECT ringtypMaleRef, ringtypFemaleRef FROM arten WHERE deutsch = '" + art + "'"),
+                                   engine.connect())
     except Exception as err:
+        print("Fehler bei Datenbankabfrage: " + str(err))
         return -2
     if art_df.empty:
-        return .3
+        return 3
     if sex == 1:
         return int(art_df.iat[0, 0])
     elif sex == 2:
         try:
-            return_val = int(art_df.iat[0, 1])
-        except Exception as err:
+            int(art_df.iat[0, 1])
+        except ValueError as err:
+            print("Fehler bei Integerumwandlung: " + str(err))
             return -4
     else:
         return -5
 
-def get_last_given_nmb(engine: Connection, ringtypref: int = None, ringserie: str = None, ) -> int:
-    try:
-        engine.ping()
-    except Connection.InterfaceError:
-        return -1
+
+def get_last_given_nmb(engine: sa.Engine, ringtypref: int = None, ringserie: str = None, ) -> int:
     if ringtypref is None and ringserie is None:
         return -1
     if ringtypref is not None and ringserie is not None:
-        df = pd.read_sql('SELECT ringserie, ringtypRef FROM ' + constants().get_tbl_name_ringserie() + ' ' +
-                         'WHERE ringserie="' + str(ringserie) + '" and ringtypRef =' + str(ringtypref), engine)
+        df = pd.read_sql_query(sa.text('SELECT ringserie, ringtypRef FROM ' + constants().get_tbl_name_ringserie() + ' ' +
+                                       'WHERE ringserie="' + str(ringserie) + '" and ringtypRef =' + str(ringtypref)),
+                               engine.connect())
         if df.empty:
             return -1
     if ringserie is not None and ringtypref is None:
-        df = pd.read_sql('SELECT ringserie, ringtypRef FROM ' + constants().get_tbl_name_ringserie() + ' ' +
-                         'WHERE ringserie="' + str(ringserie) + '" AND status = 1', engine)
+        df = pd.read_sql_query(sa.text('SELECT ringserie, ringtypRef FROM ' + constants().get_tbl_name_ringserie() + ' ' +
+                                       'WHERE ringserie="' + str(ringserie) + '" AND status = 1'), engine.connect())
         if df.empty:
             return -1
         ringtypref = int(df['ringtypRef'].iloc[0])
     if ringtypref is not None:
-        df = pd.read_sql('SELECT * FROM ' + constants().get_tbl_name_ringserie() + ' ' +
-                         'WHERE ringtypRef =' + str(ringtypref) + ' ' + 'and status = 1', engine)
+        df = pd.read_sql_query(sa.text('SELECT * FROM ' + constants().get_tbl_name_ringserie() + ' ' +
+                                       'WHERE ringtypRef =' + str(ringtypref) + ' ' + 'and status = 1'), engine.connect())
         if df.empty:
             return -1
         if df.shape[0] != 1:
@@ -162,7 +158,7 @@ def get_last_given_nmb(engine: Connection, ringtypref: int = None, ringserie: st
         return -1
 
 
-def get_next_nr(engine: Connection, ringtypref: int = None, ringserie: str = None, ) -> (int, int, str):
+def get_next_nr(engine: sa.Engine, ringtypref: int = None, ringserie: str = None, ) -> (int, int, str):
     """
     Ermittelt die nächste zu vergebende Ringnummer anhand der übergebenen Parameter RingtypRef oder Ringserie.
     Es wird KEINE Änderung vorgenommen sondern nur die nächste Ringnummer ermittelt und zurückgegeben.
@@ -175,27 +171,24 @@ def get_next_nr(engine: Connection, ringtypref: int = None, ringserie: str = Non
     int: Anzahl verbleibender Ringe auf Paket/Schnur ODER -1 bei Fehler
     str: 2-stellige Ringserie ODER Fehlertext bei Fehler
     """
-    try:
-        engine.ping()
-    except Connection.InterfaceError:
-        return -1, -1, 'Keine Verbindung zur Datenbank.'
     if ringtypref is None and ringserie is None:
         return -1, -1, 'Keine Serie und kein Ringtyp übergeben. Mindestens eine Angabe ist erforderlich.'
     if ringtypref is not None and ringserie is not None:
-        df = pd.read_sql('SELECT ringserie, ringtypRef FROM ' + constants().get_tbl_name_ringserie() + ' ' +
-                         'WHERE ringserie="' + str(ringserie) + '" and ringtypRef =' + str(ringtypref), engine)
+        df = pd.read_sql_query(sa.text('SELECT ringserie, ringtypRef FROM ' + constants().get_tbl_name_ringserie() + ' ' +
+                                       'WHERE ringserie="' + str(ringserie) + '" and ringtypRef =' + str(ringtypref)),
+                               engine.connect())
         if df.empty:
             return -1, -1, f'Ringserie "{ringserie}" und Ringtyp "{ringtypref}" passen nicht zueinander.'
     if ringserie is not None and ringtypref is None:
-        df = pd.read_sql('SELECT ringserie, ringtypRef FROM ' + constants().get_tbl_name_ringserie() + ' ' +
-                         'WHERE ringserie="' + str(ringserie) + '" AND status = 1', engine)
+        df = pd.read_sql_query(sa.text('SELECT ringserie, ringtypRef FROM ' + constants().get_tbl_name_ringserie() + ' ' +
+                                       'WHERE ringserie="' + str(ringserie) + '" AND status = 1'), engine.connect())
         if df.empty:
             return (-1, -1, f'Zur Ringserie {ringserie} gibt es kein aktives Ringnummernpaket. Bitte Stationsleitung '
                             f'informieren, denn es muss ein entsprechendes Paket aktiviert werden.')
         ringtypref = int(df['ringtypRef'].iloc[0])
     if ringtypref is not None:
-        df = pd.read_sql('SELECT * FROM ' + constants().get_tbl_name_ringserie() + ' ' +
-                         'WHERE ringtypRef =' + str(ringtypref) + ' ' + 'and status = 1', engine)
+        df = pd.read_sql_query(sa.text('SELECT * FROM ' + constants().get_tbl_name_ringserie() + ' ' +
+                                       'WHERE ringtypRef =' + str(ringtypref) + ' ' + 'and status = 1'), engine.connect())
         if df.empty:
             return (-1, -1, f'Zum Ringtyp {ringtypref} gibt es kein aktives Ringnummernpaket. Bitte Stationsleitung '
                             f'informieren, denn es muss ein entsprechendes Paket aktiviert werden.')
@@ -212,7 +205,7 @@ def get_next_nr(engine: Connection, ringtypref: int = None, ringserie: str = Non
     return -1, -1, 'Unbekannter Fehler. Ganz schlecht. Bitte Entwickler kontaktieren: mail@sseyfert.de'
 
 
-def get_next_paket_infos(engine: Connection, ringtypref: int = None, ringserie: str = None, ) -> (int, tuple):
+def get_next_paket_infos(engine: sa.Engine, ringtypref: int = None, ringserie: str = None, ) -> (int, tuple):
     """
 
     :param engine:
@@ -227,28 +220,30 @@ def get_next_paket_infos(engine: Connection, ringtypref: int = None, ringserie: 
 
     """
     try:
-        engine.ping()
-    except Connection.InterfaceError:
+        engine.connect()
+    except exc.DBAPIError as fehler:
+        print("Fehler bei Datenbankabfrage: " + str(fehler))
         return -1, ('Keine Verbindung zur Datenbank.', '', '', '', '', '')
     if ringtypref is None and ringserie is None:
         return -1, ('Keine Serie und kein Ringtyp übergeben. Mindestens eine Angabe ist erforderlich.', '', '', '',
                     '', '')
     if ringtypref is not None and ringserie is not None:
-        df = pd.read_sql('SELECT ringserie, ringtypRef FROM ' + constants().get_tbl_name_ringserie() + ' ' +
-                         'WHERE ringserie="' + str(ringserie) + '" and ringtypRef =' + str(ringtypref), engine)
+        df = pd.read_sql_query(sa.text('SELECT ringserie, ringtypRef FROM ' + constants().get_tbl_name_ringserie() + ' ' +
+                                       'WHERE ringserie="' + str(ringserie) + '" and ringtypRef =' + str(ringtypref)),
+                               engine.connect())
         if df.empty:
             return -1, (f'Ringserie "{ringserie}" und Ringtyp "{ringtypref}" passen nicht zueinander.', '', '', '',
                         '', '')
     if ringserie is not None and ringtypref is None:
-        df = pd.read_sql('SELECT ringserie, ringtypRef FROM ' + constants().get_tbl_name_ringserie() + ' ' +
-                         'WHERE ringserie="' + str(ringserie) + '"', engine)
+        df = pd.read_sql_query(sa.text('SELECT ringserie, ringtypRef FROM ' + constants().get_tbl_name_ringserie() + ' ' +
+                                       'WHERE ringserie="' + str(ringserie) + '"'), engine.connect())
         if df.empty:
             return -1, (f'Zur Ringserie {ringserie} gibt es kein aktives Ringnummernpaket. Bitte Stationsleitung '
                         f'informieren, denn es muss ein entsprechendes Paket aktiviert werden.', '', '', '', '', '')
         ringtypref = int(df['ringtypRef'].iloc[0])
     if ringtypref is not None:
-        df = pd.read_sql('SELECT * FROM ' + constants().get_tbl_name_ringserie() + ' ' +
-                         'WHERE ringtypRef =' + str(ringtypref) + ' ' + 'and status = 1', engine)
+        df = pd.read_sql_query(sa.text('SELECT * FROM ' + constants().get_tbl_name_ringserie() + ' ' +
+                                       'WHERE ringtypRef =' + str(ringtypref) + ' ' + 'and status = 1'), engine.connect())
         if df.empty:
             return -1, (f'Zum Ringtyp {ringtypref} gibt es kein aktives Ringnummernpaket. Bitte Stationsleitung '
                         f'informieren, denn es muss ein entsprechendes Paket aktiviert werden.', '', '', '', '', '')
@@ -256,21 +251,22 @@ def get_next_paket_infos(engine: Connection, ringtypref: int = None, ringserie: 
             return -1, (f'Es wurde mehr als ein aktives Ringnummernpaket gefunden. Das darf nicht sein!', '', '', '',
                         '', '')
 
-        df_next_packages = pd.read_sql('SELECT * FROM ' + constants().get_tbl_name_ringserie() + ' ' +
-                                       'WHERE ringtypRef = ' + str(ringtypref) + ' AND status = 0', engine)
+        df_next_packages = pd.read_sql_query(sa.text('SELECT * FROM ' + constants().get_tbl_name_ringserie() + ' ' +
+                                                     'WHERE ringtypRef = ' + str(ringtypref) + ' AND status = 0'),
+                                             engine.connect())
         if not df_next_packages.empty:
             df_next_package_index = df_next_packages['paketnummer'].idxmin()
             next_package_nmb = int(df_next_packages['paketnummer'].loc[df_next_package_index])
             next_package_info = ('', df_next_packages['ringserie'].loc[df_next_package_index],
-                             df_next_packages['ringnummerStart'].loc[df_next_package_index],
-                             df_next_packages['ringnummerEnde'].loc[df_next_package_index],
-                             df_next_packages['letztevergebenenummer'].loc[df_next_package_index])
+                                 df_next_packages['ringnummerStart'].loc[df_next_package_index],
+                                 df_next_packages['ringnummerEnde'].loc[df_next_package_index],
+                                 df_next_packages['letztevergebenenummer'].loc[df_next_package_index])
             return next_package_nmb, next_package_info
         else:
             return -1, f"Es gibt kein weiteres Paket! Ggf. Ringe nachbestellen! Info an das Management, bitte!"
 
 
-def increment_last_nr(engine: Connection, ringtypref: int = None, ringserie: str = None, ) -> (int, str):
+def increment_last_nr(engine: sa.Engine, ringtypref: int = None, ringserie: str = None, ) -> (int, str):
     """
 
     :param engine:
@@ -282,27 +278,28 @@ def increment_last_nr(engine: Connection, ringtypref: int = None, ringserie: str
     str: Fehlertext ---- ODER '' bei Fehler
     """
     try:
-        engine.ping()
-    except Connection.InterfaceError:
+        engine.connect()
+    except exc.DBAPIError as fehler:
+        print("Fehler bei Datenbankabfrage: " + str(fehler))
         return -1, 'Keine Verbindung zur Datenbank.'
-    engine.reset()
     if ringtypref is None and ringserie is None:
         return -1, 'Keine Serie und kein Ringtyp übergeben. Mindestens eine Angabe ist erforderlich.'
     if ringtypref is not None and ringserie is not None:
-        df = pd.read_sql('SELECT ringserie, ringtypRef FROM ' + constants().get_tbl_name_ringserie() + ' ' +
-                         'WHERE ringserie="' + str(ringserie) + '" and ringtypRef =' + str(ringtypref), engine)
+        df = pd.read_sql_query(sa.text('SELECT ringserie, ringtypRef FROM ' + constants().get_tbl_name_ringserie() + ' ' +
+                                       'WHERE ringserie="' + str(ringserie) + '" and ringtypRef =' + str(ringtypref)),
+                               engine.connect())
         if df.empty:
             return -1, f'Ringserie "{ringserie}" und Ringtyp "{ringtypref}" passen nicht zueinander.'
     if ringserie is not None and ringtypref is None:
-        df = pd.read_sql('SELECT ringserie, ringtypRef FROM ' + constants().get_tbl_name_ringserie() + ' ' +
-                         'WHERE ringserie="' + str(ringserie) + '"', engine)
+        df = pd.read_sql_query(sa.text('SELECT ringserie, ringtypRef FROM ' + constants().get_tbl_name_ringserie() + ' ' +
+                                       'WHERE ringserie="' + str(ringserie) + '"'), engine.connect())
         if df.empty:
             return (-1, f'Zur Ringserie {ringserie} gibt es kein aktives Ringnummernpaket. Bitte Stationsleitung '
                         f'informieren, denn es muss ein entsprechendes Paket aktiviert werden.')
         ringtypref = int(df['ringtypRef'].iloc[0])
     if ringtypref is not None:
-        df = pd.read_sql('SELECT * FROM ' + constants().get_tbl_name_ringserie() + ' ' +
-                         'WHERE ringtypRef =' + str(ringtypref) + ' ' + 'and status = 1', engine)
+        df = pd.read_sql_query(sa.text('SELECT * FROM ' + constants().get_tbl_name_ringserie() + ' ' +
+                                       'WHERE ringtypRef =' + str(ringtypref) + ' ' + 'and status = 1'), engine.connect())
         if df.empty:
             return (-1, f'Zum Ringtyp {ringtypref} gibt es kein aktives Ringnummernpaket. Bitte Stationsleitung '
                         f'informieren, denn es muss ein entsprechendes Paket aktiviert werden.')
@@ -330,14 +327,14 @@ def increment_last_nr(engine: Connection, ringtypref: int = None, ringserie: str
                 sql_t = ('UPDATE ' + constants().get_tbl_name_ringserie() + ' ' + 'SET status = 2, inventur = 0 ' +
                          'WHERE ringserieID = ' + str(ringserie_id))
                 try:
-                    cursor = engine.cursor()
-                    cursor.execute(sql_t)
-                    engine.commit()
+                    with engine.connect() as conn:
+                        conn.execute(sa.text(sql_t))
+                        conn.commit()
                 except Exception as excp:
                     return (-1, f'Update der abgeschlossenen Ringserie hat nicht geklappt. Das ist ganz, ganz, GANZ '
                                 f'schlecht und darf nicht passieren. '
                                 f'Unbedingt Entwickler kontaktieren bevor es weitergeht.\n'
-                            f'Exception: {excp}')
+                                f'Exception: {excp}')
 
                 # 3) + 4) + 6)
                 new_id = activate_next_package(engine, ringtypref)
@@ -358,17 +355,15 @@ def increment_last_nr(engine: Connection, ringtypref: int = None, ringserie: str
                                                  'werden: mail@sseyfert.de', 'Schwerer Fehler').exec_()
                     return -1, 'Aktivierung des nächste Pakets konnte leider nicht durchgeführt werden.'
                 else:
-                    df_tmp = pd.read_sql('SELECT * FROM ' + constants().get_tbl_name_ringserie() + ' ' +
-                                         'WHERE ringserieID = ' + str(new_id), engine)
+                    df_tmp = pd.read_sql_query(sa.text('SELECT * FROM ' + constants().get_tbl_name_ringserie() + ' ' +
+                                                       'WHERE ringserieID = ' + str(new_id)), engine.connect())
                     start_nr = df_tmp['ringnummerStart'].loc[0] - 1
                     sql_t = ('UPDATE ' + constants().get_tbl_name_ringserie() + ' ' +
                              'SET letztevergebenenummer = ' + str(start_nr) + ' WHERE ringserieID = ' + str(new_id))
                     try:
-                        cursor = engine.cursor()
-                        cursor.execute(sql_t)
-                        engine.commit()
-                        cursor.close()
-                        #return start_nr, ''
+                        with engine.connect() as conn:
+                            conn.execute(sa.text(sql_t))
+                            conn.commit()
                     except Exception as excp:
                         rberi_lib.QMessageBoxB('ok', 'Letzte vergebene Ringnummer konnte nicht geschrieben '
                                                      'werden. Schwerer Ausnahmefehler. Bitte Entwickler kontaktieren: '
@@ -382,10 +377,9 @@ def increment_last_nr(engine: Connection, ringtypref: int = None, ringserie: str
         try:
             sql_t = ('UPDATE ' + constants().get_tbl_name_ringserie() + ' ' + 'SET letztevergebenenummer = ' +
                      str(new_nmb) + ' ' + 'WHERE ringserieID = ' + str(ringserie_id))
-            cursor = engine.cursor()
-            cursor.execute(sql_t)
-            engine.commit()
-            cursor.close()
+            with engine.connect() as conn:
+                conn.execute(sa.text(sql_t))
+                conn.commit()
             return new_nmb, ''
         except Exception as excp:
             rberi_lib.QMessageBoxB('ok', 'Letzte vergebene Ringnummer konnte nicht erhöht werden. Ganz blöd. '
@@ -403,22 +397,25 @@ def show_beispiel():
 
 
 class _RingSerienVerwaltung(QDialog):
-    def __init__(self, engine: Connection, parent=None):
+    def __init__(self, engine: sa.Engine, parent=None):
         super().__init__(parent)
         self.flag_neue_serie = False
         self.ui = Ui_DialogRingserienEingabe()
         self.ui.setupUi(self)
         self.ui.TBL_ringserien.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
+        self.info_diag = QDialog()
 
         self._engine = engine
         self.bd = constants()
         self.ui.groupBox_zusatzeingabe.setVisible(True)
         self.ui.groupBox_zusatzeingabe.setEnabled(False)
 
-        self.df_ringserien = pd.read_sql("SELECT DISTINCT ringserie FROM " + self.bd.get_tbl_name_ringserie(), engine)
+        self.df_ringserien = pd.read_sql_query(sa.text("SELECT DISTINCT ringserie FROM " + self.bd.get_tbl_name_ringserie()),
+                                               engine.connect())
         self.set_ringserie_inhalt(self.df_ringserien['ringserie'].tolist())
 
-        self.df_ringtypen = pd.read_sql("SELECT ringtypID, klasse, material, durchmesser FROM ringtyp", engine)
+        self.df_ringtypen = pd.read_sql_query(sa.text("SELECT ringtypID, klasse, material, durchmesser FROM ringtyp"),
+                                              engine.connect())
         ringtypen_list = []
         for ind, val in self.df_ringtypen.iterrows():
             ringtypen_list.append(str(val['klasse']) + ", " + str(val['material']) + ", " +
@@ -442,8 +439,10 @@ class _RingSerienVerwaltung(QDialog):
 
     def get_forecast(self, restanzahl: int, rtypRef: str) -> datetime.date:
         try:
-            df_serie = pd.read_sql("SELECT ringserie FROM ringserie WHERE ringtyp_Ref = " + str(rtypRef), self.get_engine())
+            df_serie = pd.read_sql_query(sa.text("SELECT ringserie FROM ringserie WHERE ringtyp_Ref = " + str(rtypRef)),
+                                         self.get_engine())
         except Exception as err:
+            print("Fehler bei Datenbankabfrage: " + str(err))
             return datetime.date(1900, 1, 1)
         year_start = datetime.date.today().year - 5
         year_end = year_start + 4
@@ -460,8 +459,10 @@ class _RingSerienVerwaltung(QDialog):
         sql_query_text += ") and fangart = 'e'"
         print(sql_query_text)
         try:
-            df_esf = pd.read_sql(sql_query_text, self.get_engine())
+            with self.get_engine().connect() as conn:
+                df_esf = pd.read_sql_query(sa.text(sql_query_text), conn)
         except Exception as err:
+            print("Fehler in try/exc: " + str(err))
             return datetime.date(1900, 1, 1)
         gesamt_anz = df_esf.shape[0]
         anz_pro_tag = gesamt_anz / 5 / 131
@@ -473,13 +474,13 @@ class _RingSerienVerwaltung(QDialog):
         rest_tage_bis_saisonende = 0
         if (datetime.date(datetime.date.today().year, 6, 30) <= datetime.date.today() <=
                 datetime.date(datetime.date.today().year, 11, 7)):
-            rest_tage_bis_saisonende = datetime.date(datetime.date.today().year,  11, 7) - datetime.date.today()
+            rest_tage_bis_saisonende = datetime.date(datetime.date.today().year, 11, 7) - datetime.date.today()
         if verbleibende_Tage <= rest_tage_bis_saisonende:
             return datetime.date.today() + datetime.timedelta(days=verbleibende_Tage)
         else:
-            if datetime.date(datetime.date.today().year, 6, 30) <= datetime.date.today():       # nach 07.11.
+            if datetime.date(datetime.date.today().year, 6, 30) <= datetime.date.today():  # nach 07.11.
                 start_forecast_year = datetime.date.today().year + 1
-            else:   # vor 30.06.
+            else:  # vor 30.06.
                 start_forecast_year = datetime.date.today().year
             forecast_ganze_jahre = verbleibende_Tage // 131
             forecast_year = start_forecast_year + int(forecast_ganze_jahre)
@@ -489,7 +490,6 @@ class _RingSerienVerwaltung(QDialog):
             return forecast_datum
 
     def info(self):
-        self.info_diag = QDialog(self)
         self.info_diag.setWindowTitle("Info über vorhandene Ringserien")
         self.info_diag.resize(1024, 800)
         self.info_diag.layout = QGridLayout(self.info_diag)
@@ -507,9 +507,10 @@ class _RingSerienVerwaltung(QDialog):
         item = QTableWidgetItem("reicht bis")
         tbl.setHorizontalHeaderItem(4, item)
         try:
-            df_ringtyp = pd.read_sql("SELECT ringtypID, klasse, durchmesser FROM ringtyp", self.get_engine())
-            df_serien = pd.read_sql("SELECT * FROM " + self.bd.get_tbl_name_ringserie() + " WHERE status = 0 OR status = 1",
-                                    self.get_engine())
+            df_ringtyp = pd.read_sql_query(sa.text("SELECT ringtypID, klasse, durchmesser FROM ringtyp"), self.get_engine())
+            df_serien = pd.read_sql_query(sa.text("SELECT * FROM " + self.bd.get_tbl_name_ringserie() + " WHERE status = 0 OR "
+                                                                                                        "status = 1"),
+                                          self.get_engine())
         except Exception as err:
             rberi_lib.QMessageBoxB('ok', 'Fehler bei der Datenbankabfrage.', 'Datenbankfehler', [str(err)]).exec_()
             return
@@ -518,12 +519,11 @@ class _RingSerienVerwaltung(QDialog):
         self.info_diag.btn = QPushButton("ok")
         self.info_diag.layout.addWidget(self.info_diag.btn, 1, 0)
         self.info_diag.btn.clicked.connect(self.info_diag.close)
-        for rtyp in pd.unique(df_serien['ringtypRef'].values.ravel()):        # ints! Referenz auf die ringtypID
+        for rtyp in pd.unique(df_serien['ringtypRef'].values.ravel()):  # ints! Referenz auf die ringtypID
             ringtyp_klasse = df_ringtyp.query("ringtypID == " + str(rtyp))['klasse'].iloc[0]
             ringtyp_durchmesser = df_ringtyp.query("ringtypID == " + str(rtyp))['durchmesser'].iloc[0]
             df_spezial = df_serien.query("ringtypRef == " + str(rtyp))
             arr = pd.unique(df_spezial['ringserie'].values.ravel())
-            flag = False
             for serie in arr:
                 df_spezial_spezial = df_spezial.query('ringserie == "' + str(serie) + '"')
                 ringserie = str(serie)
@@ -537,39 +537,36 @@ class _RingSerienVerwaltung(QDialog):
                             anz_einzeln = int(val['ringnummerEnde']) - int(val['ringnummerStart'])
                             vorhanden += anz_einzeln
                     except Exception as err:
+                        print("Fehler in try/exc: " + str(err))
                         vorhanden = -999
 
                 tbl.setRowCount(tbl.rowCount() + 1)
-                tbl.setItem(tbl.rowCount()-1, 0, QTableWidgetItem(ringserie))
-                tbl.setItem(tbl.rowCount()-1, 1, QTableWidgetItem(str(ringtyp_klasse)))
-                tbl.setItem(tbl.rowCount()-1, 2, QTableWidgetItem(str(ringtyp_durchmesser)))
+                tbl.setItem(tbl.rowCount() - 1, 0, QTableWidgetItem(ringserie))
+                tbl.setItem(tbl.rowCount() - 1, 1, QTableWidgetItem(str(ringtyp_klasse)))
+                tbl.setItem(tbl.rowCount() - 1, 2, QTableWidgetItem(str(ringtyp_durchmesser)))
                 itemX = QTableWidgetItem()
                 # itemX.setText(str(vorhanden))
                 itemX.setData(Qt.DisplayRole, vorhanden)
-                tbl.setItem(tbl.rowCount()-1, 3, itemX)
+                tbl.setItem(tbl.rowCount() - 1, 3, itemX)
                 itemY = QTableWidgetItem()
                 try:
                     itemY.setData(Qt.DisplayRole, self.get_forecast(vorhanden, rtyp).strftime("%Y-%m-%d"))
                 except Exception as err:
-                    flag = True
+                    rberi_lib.QMessageBoxB('ok', 'Es gab Fehler bei der Forecastberechnung! Spalte ist mit "Fehler" markiert.',
+                                           'Interner Fehler!', str(err)).exec_()
                     itemY.setData(Qt.DisplayRole, "Fehler!")
-                tbl.setItem(tbl.rowCount()-1, 4, itemY)
-        if flag:
-            rberi_lib.QMessageBoxB('ok', 'Es gab Fehler bei der Forecastberechnung! Spalte ist mit "Fehler" markiert.',
-                                   'Interner Fehler!', str(err)).exec_()
+                tbl.setItem(tbl.rowCount() - 1, 4, itemY)
         tbl.resizeColumnsToContents()
         tbl.setSortingEnabled(True)
         tbl.sortByColumn(4, Qt.AscendingOrder)
         self.info_diag.exec()
-
-
 
     def fill_TBL_ringtypen(self):
         for i in range(self.ui.TBL_ringtypen.rowCount()):
             self.ui.TBL_ringtypen.removeRow(i)
         sql_text = "SELECT klasse, material, durchmesser, hoehe, staerke, farbe, bemerkung FROM ringtyp"
         try:
-            df_ringtyp = pd.read_sql(sql_text, self.get_engine())
+            df_ringtyp = pd.read_sql_query(sa.text(sql_text), self.get_engine())
         except Exception as excp:
             rberi_lib.QMessageBoxB('ok', 'Kann die Ringtypen nicht einlesen. Datenbank verbunden?',
                                    'Fehler', str(excp)).exec_()
@@ -593,9 +590,9 @@ class _RingSerienVerwaltung(QDialog):
         end = self.ui.TBL_ringserien.item(row, 3).text()
         paket = self.ui.TBL_ringserien.item(row, 4).text()
 
-        df = pd.read_sql("SELECT ringserieID FROM " + constants().get_tbl_name_ringserie() + " " + "WHERE " +
-                         "ringserie = '" + serie + "' and ringtypRef = " + typ + " and ringnummerStart = " + start +
-                         " and ringnummerEnde = " + end + ' and paketnummer = ' + paket, self.get_engine())
+        df = pd.read_sql_query(sa.text("SELECT ringserieID FROM " + constants().get_tbl_name_ringserie() + " " + "WHERE " +
+                                       "ringserie = '" + serie + "' and ringtypRef = " + typ + " and ringnummerStart = " + start +
+                                       " and ringnummerEnde = " + end + ' and paketnummer = ' + paket), self.get_engine())
         if df.empty:
             return -1
         else:
@@ -703,7 +700,7 @@ class _RingSerienVerwaltung(QDialog):
         sql_text = ("SELECT ringtypRef FROM " + self.bd.get_tbl_name_ringserie() + " WHERE ringserie = '" +
                     val + "'")
         try:
-            df_ringtyp = pd.read_sql(sql_text, self.get_engine())
+            df_ringtyp = pd.read_sql_query(sa.text(sql_text), self.get_engine())
         except Exception as excp:
             rberi_lib.QMessageBoxB('ok', 'Es konnte kein Ringtyp zur Serie gefunden werden.', "Fehler",
                                    str(excp)).exec_()
@@ -726,7 +723,7 @@ class _RingSerienVerwaltung(QDialog):
         # new_digit = new_vals[0].strip().replace('.', ',')
         sql_text = ("SELECT ringtypID FROM ringtyp WHERE klasse = '" + str(vals[0].strip()) + "' and material = '" +
                     str(vals[1].strip()) + "' and durchmesser = " + str(new_vals[0].strip()))
-        df_ringtyp = pd.read_sql(sql_text, self.get_engine())
+        df_ringtyp = pd.read_sql_query(sa.text(sql_text), self.get_engine())
         if df_ringtyp.empty:
             return -1
         else:
@@ -735,17 +732,16 @@ class _RingSerienVerwaltung(QDialog):
     def save_table(self):
         for i in range(self.ui.TBL_ringserien.rowCount()):
             id_self = str(self.get_id_of_row(i))
-            df_status = pd.read_sql("SELECT status FROM " + constants().get_tbl_name_ringserie() + " " +
-                                    "WHERE ringserieID = " + id_self, self.get_engine())
+            df_status = pd.read_sql_query(sa.text("SELECT status FROM " + constants().get_tbl_name_ringserie() + " " +
+                                                  "WHERE ringserieID = " + id_self), self.get_engine())
             if self.ui.TBL_ringserien.item(i, 6).text() != str(df_status['status'].iloc[0]):
                 sql_t = ("UPDATE " + constants().get_tbl_name_ringserie() + " " +
                          "SET status=" + self.ui.TBL_ringserien.item(i, 6).text() + " " + "WHERE ringserieID ="
                          + id_self)
-                cursor = self.get_engine().cursor()
                 try:
-                    cursor.execute(sql_t)
-                    self.get_engine().commit()
-                    cursor.close()
+                    with self.get_engine().connect() as conn:
+                        conn.execute(sa.text(sql_t))
+                        conn.commit()
                 except Exception as excp:
                     rberi_lib.QMessageBoxB('ok', 'Fehler beim Schreiben eines Datensatzes.', 'Warnung',
                                            str(excp)).exec_()
@@ -770,10 +766,10 @@ class _RingSerienVerwaltung(QDialog):
                    "paketnummer": 99999, "letztevergebenenummer": 1, "status": 3, "bemerkung": "dummy"}
         content = pd.DataFrame(data=content, index=[0])
         try:
-            content = pd.read_sql("SELECT ringserie, ringtypRef, ringnummerStart, ringnummerEnde, " +
-                                  "paketnummer, letztevergebenenummer, status, bemerkung FROM " +
-                                  self.bd.get_tbl_name_ringserie() + " WHERE ringserie = '" +
-                                  self.get_ringserie() + "'", self.get_engine())
+            content = pd.read_sql_query(sa.text("SELECT ringserie, ringtypRef, ringnummerStart, ringnummerEnde, " +
+                                                "paketnummer, letztevergebenenummer, status, bemerkung FROM " +
+                                                self.bd.get_tbl_name_ringserie() + " WHERE ringserie = '" +
+                                                self.get_ringserie() + "'"), self.get_engine())
         except Exception as excp:
             QMessageBox(QMessageBox.Warning, 'Fehler',
                         f'Die aktuellen Pakete der Ringserien können nicht eingelesen werden.\n' +
@@ -797,7 +793,7 @@ class _RingSerienVerwaltung(QDialog):
         """
         sql_text = "SELECT paketnummer FROM " + self.bd.tbl_name_ringserie + " WHERE ringtypRef=" + str(ringtyp)
         try:
-            df_ringserien = pd.read_sql(sql_text, self.get_engine())
+            df_ringserien = pd.read_sql_query(sa.text(sql_text), self.get_engine())
         except Exception as excp:
             rberi_lib.QMessageBoxB('ok', 'Fehler beim Einlesen der Paketnummern für den Ringtyp. Vermutlich '
                                          'ist die Datenbank nicht verbunden.', 'Fehler', str(excp)).exec_()
@@ -901,8 +897,8 @@ class _RingSerienVerwaltung(QDialog):
             oldserie = self.ui.CMB_ringserienauswahl.currentText()
 
         self.ui.CMB_ringserienauswahl.clear()
-        self.df_ringserien = pd.read_sql("SELECT DISTINCT ringserie FROM " + self.bd.get_tbl_name_ringserie(),
-                                         self.get_engine())
+        self.df_ringserien = pd.read_sql_query(sa.text("SELECT DISTINCT ringserie FROM " + self.bd.get_tbl_name_ringserie()),
+                                               self.get_engine())
         self.set_ringserie_inhalt(self.df_ringserien['ringserie'].tolist())
         self.ui.CMB_ringserienauswahl.setCurrentText(oldserie)
         self.set_flag_neue_serie(False)
@@ -956,12 +952,24 @@ class _RingSerienVerwaltung(QDialog):
                 sql_text = ("INSERT INTO " + self.bd.get_tbl_name_ringserie() + " (ringserie, ringserieZusatz, " +
                             "ringtypRef, ringnummerStart, ringnummerEnde, paketnummer, letztevergebenenummer, " +
                             "status, inventur, bemerkung) " +
-                            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
+                            "VALUES (:ringserie, :ringserieZusatz, :ringtypRef, :start, :ende, :paketnr, :lastnmb, :stat, :inv, "
+                            ":bemerkung)")
+                values = {
+                    'ringserie': ringserie,
+                    'ringserieZusatz': ringserieZusatz,
+                    'ringtypRef': ringtypRef,
+                    'start': ringnummerStart,
+                    'ende': ringnummerEnde,
+                    'paketnr': paketnummer,
+                    'lastnmb': letztevergebenenummer,
+                    'stat': status,
+                    'inv': inventur,
+                    'bemerkung': bemerkung,
+                }
                 try:
-                    self.get_engine().cursor().execute(sql_text, (ringserie, ringserieZusatz, ringtypRef,
-                                                                  ringnummerStart, ringnummerEnde, paketnummer,
-                                                                  letztevergebenenummer, status, inventur, bemerkung))
-                    self.get_engine().commit()
+                    with self.get_engine().connect() as conn:
+                        conn.execute(sa.text(sql_text), [values])
+                        conn.commit()
                 except Exception as excp:
                     rberi_lib.QMessageBoxB('ok', 'Anlage hat nicht geklappt.', 'Fehler', str(excp)).exec_()
         else:
@@ -1003,12 +1011,25 @@ class _RingSerienVerwaltung(QDialog):
                 sql_text = ("INSERT INTO " + self.bd.get_tbl_name_ringserie() + " (ringserie, ringserieZusatz, " +
                             "ringtypRef, ringnummerStart, ringnummerEnde, paketnummer, letztevergebenenummer, " +
                             "status, inventur, bemerkung) " +
-                            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
+                            "VALUES (:ringserie, :ringserieZusatz, :ringtypRef, :start, :ende, :paketnr, :lastnmb, :stat, :inv, "
+                            ":bemerkung)")
+
+                values = {
+                    'ringserie': ringserie,
+                    'ringserieZusatz': ringserieZusatz,
+                    'ringtypRef': ringtypRef,
+                    'start': ringnummerStart,
+                    'ende': ringnummerEnde,
+                    'paketnr': paketnummer,
+                    'lastnmb': letztevergebenenummer,
+                    'stat': status,
+                    'inv': inventur,
+                    'bemerkung': bemerkung,
+                }
                 try:
-                    self.get_engine().cursor().execute(sql_text, (ringserie, ringserieZusatz, ringtypRef,
-                                                                  ringnummerStart, ringnummerEnde, paketnummer,
-                                                                  letztevergebenenummer, status, inventur, bemerkung))
-                    self.get_engine().commit()
+                    with self.get_engine().connect() as conn:
+                        conn.execute(sa.text(sql_text), [values])
+                        conn.commit()
                 except Exception as excp:
                     rberi_lib.QMessageBoxB('ok', 'Anlage hat nicht geklappt.', 'Fehler', str(excp)).exec_()
         else:

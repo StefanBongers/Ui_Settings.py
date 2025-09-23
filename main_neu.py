@@ -5,16 +5,12 @@ import subprocess
 import time
 from ctypes import c_ushort, c_ulong
 from typing import Literal
-from unittest.mock import inplace
 
 import cv2
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import paramiko
-import win32api
-import win32con
-import win32gui
 import wmi
 from PIL import Image
 from PyQt5.QtGui import QPixmap, QImage, QPainter, QColor, QFontMetrics
@@ -22,6 +18,8 @@ from _ctypes import Structure
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure as FigBon
+from sqlalchemy import Connection
+import sqlalchemy as sa
 from usbmonitor import USBMonitor
 
 import mariadb
@@ -41,10 +39,9 @@ from PyQt5.QtWidgets import (QPushButton, QLabel, QLineEdit, QGridLayout, QCombo
                              QTableWidgetItem, QTreeWidgetItem, QTreeWidgetItemIterator, QFileDialog, QWidget,
                              QVBoxLayout, QShortcut, QGraphicsPixmapItem, QGraphicsScene, QGraphicsView,
                              QMainWindow, QCheckBox, QRadioButton, QTableWidget, QHBoxLayout, QListWidget,
-                             QListWidgetItem, QPlainTextEdit, QProgressBar)
+                             QListWidgetItem, QPlainTextEdit, QProgressBar, QDateEdit, QTimeEdit)
 from PyQt5 import QtWidgets, QtGui, QtCore, sip
-from PyQt5.QtCore import QDate, QTime, Qt, QEvent, QObject, QRegularExpression, pyqtSignal, pyqtSlot, QEventLoop, QTimer, \
-    QSortFilterProxyModel
+from PyQt5.QtCore import QDate, QTime, Qt, QEvent, QObject, QRegularExpression, QEventLoop, QTimer, QSortFilterProxyModel
 from cryptography.fernet import Fernet
 from img_viewer import ImageViewer
 
@@ -117,206 +114,6 @@ class DEV_BROADCAST_VOLUME(Structure):
     ]
 
 
-class Notification(QObject):
-    stickAdded = pyqtSignal(str)
-
-    def __init__(self):
-        super().__init__(parent=None)
-
-        message_map = {
-            win32con.WM_DEVICECHANGE: self.onDeviceChange
-        }
-
-        wc = win32gui.WNDCLASS()
-        hinst = wc.hInstance = win32api.GetModuleHandle(None)
-        wc.lpszClassName = "DeviceChangeDemo"
-        wc.style = win32con.CS_VREDRAW | win32con.CS_HREDRAW
-        wc.hCursor = win32gui.LoadCursor(0, win32con.IDC_ARROW)
-        wc.hbrBackground = win32con.COLOR_WINDOW
-        wc.lpfnWndProc = message_map
-        classAtom = win32gui.RegisterClass(wc)
-        style = win32con.WS_OVERLAPPED | win32con.WS_SYSMENU
-        self.hwnd = win32gui.CreateWindow(
-            classAtom,
-            "Device Change Demo",
-            style,
-            0, 0,
-            win32con.CW_USEDEFAULT, win32con.CW_USEDEFAULT,
-            0, 0,
-            hinst, None
-        )
-        self.added_drive = None
-
-    def onDeviceChange(self, hwnd, msg, wparam, lparam) -> int:
-        #
-        # WM_DEVICECHANGE:
-        #  wParam - type of change: arrival, removal etc.
-        #  lParam - what's changed?
-        #    if it's a volume then...
-        #  lParam - what's changed more exactly
-        #
-        """
-
-        :param hwnd:
-        :param msg:
-        :param wparam:
-        :param lparam:
-        :return:
-        1 - wenn Medium hinzugefügt wurde
-        2 - sonst
-        """
-        if self:
-            print(f"hwnd = {hwnd}")
-            print(f"msg = {msg}")
-            print(f"wparam = {wparam}")
-            print(f"lparam = {lparam}")
-
-        dev_broadcast_hdr = DEV_BROADCAST_HDR.from_address(lparam)
-        if wparam == DBT_DEVICEARRIVAL:
-            if bd.get_debug():
-                print("Something's arrived")
-            if dev_broadcast_hdr.dbch_devicetype == DBT_DEVTYP_VOLUME:
-                if bd.get_debug():
-                    print("It's a volume!")
-                dev_broadcast_volume = DEV_BROADCAST_VOLUME.from_address(lparam)
-                drive_letter = drive_from_mask(dev_broadcast_volume.dbcv_unitmask)
-                if bd.get_debug():
-                    print("in drive", chr(ord("A") + drive_letter))
-                self.added_drive = chr(ord("A") + drive_letter)
-                self.stickAdded.emit(self.added_drive)
-        return 1
-
-
-class Backup_GUI2(QDialog):
-    def __init__(self):
-        super().__init__(parent=None)
-
-        self.backup_command = []
-        self.laufwerk = ""
-        self.fullback_needed = False
-
-        self.setWindowTitle("Tägliches Backup")
-        self.resize(1000, 700)
-        self.layout = QVBoxLayout()
-
-        self.button_backup = QPushButton('Backup!')
-        self.button_backup.setVisible(False)
-        self.button_backup.clicked.connect(self.backup_clicked)
-        self.info = QListWidget()
-        self.info.addItem(QListWidgetItem("Bitte USB - Stick einstecken ... "))
-        self.info.addItem(QListWidgetItem("Suche nach NEUEM Speichermedium ... "))
-        self.info.setAutoScroll(True)
-
-        self.spacerItem = QtWidgets.QSpacerItem(10, 30, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
-
-        self.layout.addWidget(self.info)
-        self.layout.addItem(self.spacerItem)
-        self.layout.addWidget(self.button_backup)
-
-        self.setLayout(self.layout)
-        self.deviceNotification = Notification()
-
-        self.deviceNotification.stickAdded.connect(self.usb_stick_added)
-
-    @pyqtSlot(str)
-    def usb_stick_added(self, laufwerk: str):
-        self.laufwerk = laufwerk
-        self.info.addItem(QListWidgetItem('... Speichermedium GEFUNDEN! Laufwerk: ' + self.laufwerk))
-        wochentage = {0: 'Montag', 1: 'Dienstag', 2: 'Mittwoch', 3: 'Donnerstag', 4: 'Freitag', 5: 'Samstag', 6: 'Sonntag'}
-        heutiger_wochentag = wochentage[datetime.today().weekday()]
-        if heutiger_wochentag in os.listdir(self.laufwerk + ":\\"):
-            # backup_dir = self.laufwerk + ":\\" + heutiger_wochentag
-            # backup_dir = os.path.join(self.laufwerk, heutiger_wochentag)
-            backup_dir = self.laufwerk + ":\\" + heutiger_wochentag
-        else:
-            rberi_lib.QMessageBoxB('ok', 'Dies scheint der falsche USB Stick zu sein. Der Backup - Stick muss die Wochentage '
-                                         'als Verzeichnisse im Grundverzeichnis enthalten. Also ' + self.laufwerk +
-                                   ':\\Montag\\, '
-                                   + self.laufwerk + ':\\Dienstag\\ etc.', 'Falsches Speichermedium', qss=bd.get_qss()).exec_()
-            return
-
-        mariabackup_path = bd.get_mariabackuppath()
-
-        if len(os.listdir(backup_dir)) <= 0:
-            self.fullback_needed = True
-            self.backup_command = [mariabackup_path, "--backup", "--target-dir=" + backup_dir, "--databases=" +
-                                   bd.get_database(), "--user=" + bd.get_user(), "--password=" + bd.get_p_deco()]
-        else:
-            self.fullback_needed = False
-            inc_number = np.array([], dtype=int)
-            for inc in os.listdir(backup_dir):
-                if "inc" in inc:
-                    inc_number = np.append(inc_number, int(inc[3:]))
-            if not np.size(inc_number):
-                last_inc_path = backup_dir
-                new_inc_path = os.path.join(backup_dir, "inc1")
-            else:
-                last_inc = inc_number.max()
-                new_inc = last_inc + 1
-                last_inc_path = os.path.join(backup_dir, "inc" + str(last_inc))
-                new_inc_path = os.path.join(backup_dir, "inc" + str(new_inc))
-
-            if bd.get_debug():
-                print(f"last_inc_path = {last_inc_path}")
-                print(f"new_inc_path = {new_inc_path}")
-
-            self.backup_command = [mariabackup_path, "--backup", "--target-dir=" + new_inc_path, "--incremental-basedir=" +
-                                   last_inc_path, "--databases=" + bd.get_database(), "--user=" + bd.get_user(),
-                                   "--password=" + bd.get_p_deco()]
-
-        self.button_backup.setVisible(True)
-
-    def backup_clicked(self):
-        self.info.addItem(QListWidgetItem('Starte Backup-Prozedere ... '))
-        loop = QEventLoop()
-        QTimer.singleShot(1000, loop.quit)
-        loop.exec_()
-        if len(self.backup_command) > 0:
-            if bd.get_debug():
-                print(f"backup_command für subprocess.run = {self.backup_command}")
-            try:
-                with (subprocess.Popen(self.backup_command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8')
-                      as result):
-                    while True:
-                        realtime_output = result.stdout.readline()
-                        if realtime_output == '' and result.poll() is not None:
-                            break
-                        if realtime_output:
-                            self.info.addItem(QListWidgetItem(realtime_output.strip()))
-                            self.info.scrollToBottom()
-                            loop = QEventLoop()
-                            QTimer.singleShot(5, loop.quit)
-                            loop.exec_()
-
-                            # print(realtime_output)
-
-            except Exception as excp:
-                rberi_lib.QMessageBoxB('ok', 'Datenbanksicherung fehlgeschlagen. Siehe Details.', 'Datenbankfehler',
-                                       str(excp), qss=bd.get_qss()).exec_()
-                return
-        else:
-            rberi_lib.QMessageBoxB('ok', 'Das Backup kann nicht erzeugt werden. Grund ist unbekannt. Der Befehl ist Null. '
-                                         'Fehlercode 1314, bitte ein Feedback mit Fehlercode absetzen. Danke!',
-                                   'BackupFehler', qss=bd.get_qss()).exec_()
-
-        self.info.addItem(QListWidgetItem('Erfolgreich beendet! Fenster schließt in 3 Sekunden ...'))
-        self.info.scrollToBottom()
-        loop = QEventLoop()
-        QTimer.singleShot(1000, loop.quit)
-        loop.exec_()
-        self.info.addItem(QListWidgetItem('Fenster schließt in 2 Sekunden ...'))
-        self.info.scrollToBottom()
-        loop = QEventLoop()
-        QTimer.singleShot(1000, loop.quit)
-        loop.exec_()
-        self.info.addItem(QListWidgetItem('Fenster schließt in 1 Sekunde ...'))
-        self.info.scrollToBottom()
-        loop = QEventLoop()
-        QTimer.singleShot(1000, loop.quit)
-        loop.exec_()
-        self.accept()
-
-
 class Backup_GUI(QDialog):
     def __init__(self):
         super().__init__(parent=None)
@@ -348,8 +145,8 @@ class Backup_GUI(QDialog):
         self.monitor = None
 
         # umgezogen in getting_started()
-            # self.generate_html()
-            # self.check_usb_drive()
+        # self.generate_html()
+        # self.check_usb_drive()
 
     def getting_started(self):
         self.check_usb_drive()
@@ -360,7 +157,8 @@ class Backup_GUI(QDialog):
                                          'aufgetreten sein, bitte einen Fehler absetzen. Danke!', 'Uploadfehler', str(fehler),
                                    qss=bd.get_qss()).exec()
 
-    def usb_added(self, device_id: str, device_info: dict[str, dict[str, str | tuple[str, ...]]]):
+    # def usb_added(self, device_id: str, device_info: dict[str, dict[str, str | tuple[str, ...]]]):
+    def usb_added(self):
         self.laufwerk = ""
         if self.usb_found:
             return
@@ -434,7 +232,8 @@ class Backup_GUI(QDialog):
         else:
             self.backup_clicked()
 
-    def usb_disconnect(self, device_id: str, device_info: dict[str, dict[str, str | tuple[str, ...]]]):
+    # def usb_disconnect(self, device_id: str, device_info: dict[str, dict[str, str | tuple[str, ...]]]):
+    def usb_disconnect(self):
         if self.monitor is not None:
             self.monitor.stop_monitoring()
 
@@ -500,22 +299,25 @@ class Backup_GUI(QDialog):
         c = wmi.WMI()
         print("USB-Gerät-Name erwartet (aus .ini) = " + bd.get_usb_vol_name()) if bd.get_debug() else None
         for disk in c.Win32_LogicalDisk(DriveType=2):
+            if disk.VolumeName is None:
+                continue
             print("Speichermediumname = " + disk.VolumeName) if bd.get_debug() else None
             if disk.VolumeName is not None:
                 if bd.get_usb_vol_name().lower() in disk.VolumeName.lower():
                     self.laufwerk = disk.Caption + chr(92)
-                    answ = rberi_lib.QMessageBoxB('ync', 'Speichermedium "' + disk.VolumeName + '" in "' + disk.Caption +
-                                                  '" gefunden. Backup starten?', "Info", qss=bd.get_qss()).exec_()
-                    if answ == QMessageBox.Yes:
-                        # self.show()
+                    _answ = rberi_lib.QMessageBoxB('ync', 'Speichermedium "' + disk.VolumeName + '" in "' + disk.Caption +
+                                                   '" gefunden. Backup starten?', "Info", qss=bd.get_qss()).exec_()
+                    if _answ == QMessageBox.Yes:
                         self.build_backup_command(True)
                         return True
         self.monitor = USBMonitor()
         self.monitor.start_monitoring(on_connect=self.usb_added, on_disconnect=self.usb_disconnect)
 
     def generate_html(self):
+        if self:
+            pass
+
         def replace_spec(spec):
-            spec_dt = ""
             spec_dt = str(df_art.query("esf_kurz == @spec")['deutsch'].iloc[0])
             if len(spec_dt) > 0:
                 return spec_dt
@@ -523,9 +325,16 @@ class Backup_GUI(QDialog):
                 return spec
 
         try:
-            df_day = pd.read_sql("SELECT art, fangart FROM esf where datum = '" + datetime.today().date().strftime("%Y-%m-%d") +
-                                 "'", engine)
-            df_art = pd.read_sql("SELECT deutsch, esf_kurz from ARTEN", engine)
+            with engine.connect() as _conn:
+                heute_datum = datetime.today().date() - timedelta(days=365)
+                # heute_datum = datetime.today().date()
+                datum_neu = heute_datum - timedelta(days=7)
+                if datum_neu.month == 6 and datum_neu.day < 30:
+                    datum_neu = date(heute_datum.year, 6, 30)
+                df_day = pd.read_sql_query(sa.text("SELECT art, fangart, datum FROM esf where datum > '" +
+                                                   datum_neu.strftime("%Y-%m-%d") + "' and datum <= '" +
+                                                   heute_datum.strftime("%Y-%m-%d") + "'"), _conn)
+                df_art = pd.read_sql_query("SELECT deutsch, esf_kurz from ARTEN", _conn)
         except Exception as _err:
             rberi_lib.QMessageBoxB('ok', 'Datenbankfehler. Bitte Detailtext als Feedback absetzen. Danke!', 'Datenbankfehler',
                                    str(_err), qss=bd.get_qss()).exec()
@@ -541,36 +350,37 @@ class Backup_GUI(QDialog):
         # jetzt brauchen wir neue spalten: art, e, w, k, summe
         df_to_html = pd.DataFrame()
         df_to_html['Art'] = None
-        df_to_html['Erstberingung'] = None
-        df_to_html['Wiederfund'] = None
-        df_to_html['Kontrollfund'] = None
-        df_to_html['Summe'] = None
 
-        print("Index = " + str(df_to_html.index.tolist()))
+        print("Index = " + str(df_to_html.index.tolist())) if bd.get_debug() else None
 
         # es wird ein Hilfs-Dataframe erzeugt, bei dem nur EINE Art enthalten ist. (also alle doppelten raus)
+        # ebenso für die Tage
         df_day_single_spec = df_day.drop_duplicates(subset=['art']).sort_values(by='art')
+        df_day_single_days = df_day.drop_duplicates(subset=['datum']).sort_values(by='datum')
+        for index, each_day in df_day_single_days.iterrows():
+            df_to_html[str(each_day['datum'])] = None
 
         # Die einzelnen Arten sind die Einträge für das HTML-DataFrame
         df_to_html['Art'] = df_day_single_spec['art']
 
         # jetzt werden die Anzahlen gezählt
-        for index, each_spec in df_day_single_spec.iterrows():
-            anzahl_e = len(df_day.loc[(df_day['art'] == each_spec['art']) & (df_day['fangart'] == 'e')])
-            anzahl_w = len(df_day.loc[(df_day['art'] == each_spec['art']) & (df_day['fangart'] == 'w')])
-            anzahl_k = len(df_day.loc[(df_day['art'] == each_spec['art']) & (df_day['fangart'] == 'k')])
+        for index_day, each_day in df_day_single_days.iterrows():
+            for index_spec, each_spec in df_day_single_spec.iterrows():
+                anzahl_e = len(df_day.loc[(df_day['art'] == each_spec['art']) & (df_day['datum'] == each_day['datum'])])
+                df_to_html.loc[df_to_html['Art'] == each_spec['art'], str(each_day['datum'])] = anzahl_e
 
-            df_to_html.loc[df_to_html['Art'] == each_spec['art'], 'Erstberingung'] = anzahl_e
-            df_to_html.loc[df_to_html['Art'] == each_spec['art'], 'Wiederfund'] = anzahl_w
-            df_to_html.loc[df_to_html['Art'] == each_spec['art'], 'Kontrollfund'] = anzahl_k
-            df_to_html.loc[df_to_html['Art'] == each_spec['art'], 'Summe'] = anzahl_e + anzahl_w + anzahl_k
+        data = {
+            'Art': ['Summe'],
+        }
+        local_sum = 0
+        for spaltenname, inhalt in df_to_html.items():
+            print(f"Spaltenname: {spaltenname}")
+            print(f"Daten der Spalte:\n{inhalt}\n")
+            print(f"Summe vielleicht auch: {inhalt.sum()}")
+            if spaltenname == "Art":
+                continue
+            data[spaltenname] = inhalt.sum()
 
-        data = {'Art': ['Summe'],
-                'Erstberingung': [df_to_html['Erstberingung'].sum()],
-                'Wiederfund': [df_to_html['Wiederfund'].sum()],
-                'Kontrollfund': [df_to_html['Kontrollfund'].sum()],
-                'Summe': [df_to_html['Summe'].sum()]
-                }
         df_to_add = pd.DataFrame(data)
         df_to_html = pd.concat([df_to_html, df_to_add], ignore_index=True, sort=False)
         try:
@@ -583,8 +393,8 @@ class Backup_GUI(QDialog):
         html_table_blue_light = build_table(df_to_html, 'blue_light', font_size='20px')
 
         pos1 = html_table_blue_light.find('font-size: 20px;text-align: left;padding: 0px 20px 0px 0px;width: auto">Summe')
-        str_links = html_table_blue_light[:pos1] #from start to pos1 which is not included
-        str_rechts = html_table_blue_light[pos1:] #from pos1 (included) to end
+        str_links = html_table_blue_light[:pos1]  # from start to pos1 which is not included
+        str_rechts = html_table_blue_light[pos1:]  # from pos1 (included) to end
         str_rechts_new = str_rechts.replace('font-size: 20px', 'font-size: 24px; font-weight:bold')
         html_table_blue_light = str_links + str_rechts_new
         html_table_blue_light.encode()
@@ -595,8 +405,8 @@ class Backup_GUI(QDialog):
                        '<link rel="stylesheet" href="https://www.w3schools.com/w3css/3/w3.css">\n'
                        '<body style="margin-left:20px;padding:5px">\n')
         html_gesamt = (html_gesamt + '<p style = "font-family: Century Gothic, sans-serif;font-size: 30px;color: #305496">' +
-                       'Tagesberingungen auf der Station "Die REIT" am ' + datetime.today().date().strftime("%d.%m.%Y" +
-                       ':</p>\n' + '<br>\n'))
+                       'Tagesberingungen auf der Station "Die REIT" zwischen ' + datum_neu.strftime("%d.%m.%Y" +
+                       ' und ' + datetime.today().date().strftime("%d.%m.%Y") + ':</p>\n' + '<br>\n'))
         html_gesamt = (html_gesamt + html_table_blue_light + '\n' + '<br>\n' +
                        '<p style="font-family: Century Gothic, sans-serif;font-size: 12px;color: #305496" > ' +
                        'Wiederfunde sind Vögel die im aktuellen Jahr bereits beringt wurden und nochmal untersucht wurden.<br>'
@@ -604,45 +414,25 @@ class Backup_GUI(QDialog):
                        'wurden.</p>\n</body>\n</html>\n')
         html_gesamt.encode()
 
-        with open('tagesliste.html', 'w') as f:
-            f.write(html_gesamt)
+        with open('tagesliste.html', 'w') as _file:
+            _file.write(html_gesamt)
 
         fernetlocal = Fernet(bd.get_key())
-        token = fernetlocal.decrypt(
-            b'gAAAAABop1Vad8zKu6PBLnGmTujJ5HtSz8gOxLx9XGdrtRUqJAx8gK7umBUlS9HpKGvD14Q4T3JQY1o0JbY29-LRtVLxwK9Yvf9lx05C1dd1-2yn7e6SKHg=')
-        pw = token.decode()
-        host = "home19135977.1and1-data.host"
+        _token = fernetlocal.decrypt(
+            b'gAAAAABop1Vad8zKu6PBLnGmTujJ5HtSz8gOxLx9XGdrtRUqJAx8gK7umBUlS9HpKGvD14Q4T3JQY1o0JbY29-LRtVLxwK9Yvf9lx05C1dd1'
+            b'-2yn7e6SKHg=')
+        _pw = _token.decode()
+        _host = "home19135977.1and1-data.host"
 
         if bd.get_upload():
             ssh_client = paramiko.SSHClient()
             ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            ssh_client.connect(host, 22, "acc927413714", pw)
+            ssh_client.connect(_host, 22, "acc927413714", _pw)
             sftp = ssh_client.open_sftp()
             sftp.put('tagesliste.html', 'index.html')
             print(sftp.listdir("."))
             sftp.close()
             ssh_client.close()
-
-        """
-        leider lässt IONOS das nicht zu
-        # testweise spielen wir hier die daten in die datenbank hoch
-        fernetlocal = Fernet(bd.get_key())
-        token = fernetlocal.decrypt(b'gAAAAABop1Vad8zKu6PBLnGmTujJ5HtSz8gOxLx9XGdrtRUqJAx8gK7umBUlS9HpKGvD14Q4T3JQY1o0JbY29-LRtVLxwK9Yvf9lx05C1dd1-2yn7e6SKHg=')
-        pw = token.decode()
-        host = "home19135977.1and1-data.host"
-        user = "acc927413714"
-        port = 22
-        database = "dbs13679113"
-        try:
-            engine2 = mariadb.connect(user=user, password=pw, host=host, port=port, database=database)
-        except mariadb.Error as excp:
-            rberi_lib.QMessageBoxB("ok", "Es konnte keine Verbindung zur Datenbank aufgebaut werden. ",
-                                   "Datenbankfehler",
-                                   ["Exception:", str(excp)], qss=bd.get_qss()).exec_()
-            return
-
-        df_2_test = pd.read_sql("SELECT * from tagesfaenge", engine2)
-        print(df_2_test)"""
 
 
 class BD:
@@ -851,7 +641,8 @@ class BD:
                 widget.destroy()
                 self.qss = qss
                 return True
-            except Exception:
+            except Exception as _excp:
+                print(f"Hier ist ein Fehler. Warum auch immer: {_excp}") if bd.get_debug() else None
                 return False
         else:
             return False
@@ -1077,7 +868,7 @@ class Kontakt_Menu_GUI(QDialog):
 
     def save(self):
         txt = ''
-        if not get_connection_status(engine):
+        if not get_connection_status():
             return
         if len(self.name_input.text()) <= 0:
             txt = 'Name'
@@ -1128,13 +919,22 @@ class Kontakt_Menu_GUI(QDialog):
         else:
             rating = None
 
-        cursor = engine.cursor()
         try:
-            cursor.execute('INSERT INTO beringung.feedback (zeitstempel, name, kontaktaufnahme, mail, text, verbesserung, '
-                           'rating) VALUES (%s, %s, %s, %s, %s, %s, %s)', (zeitstempel, name, kontaktaufnahme, email,
-                                                                           feedbacktext, verbesserung, rating))
-            engine.commit()
-            cursor.close()
+            with engine.connect() as conn_local:
+                sql_text = ('INSERT INTO beringung.feedback (zeitstempel, name, kontaktaufnahme, mail, text, '
+                            'verbesserung, rating) VALUES (:zeitstempel, :name, :kontaktaufnahme, :email, :feedbacktext, '
+                            ':verbesserung, :rating)')
+                values = {
+                    'zeitstempel': zeitstempel,
+                    'name': name,
+                    'kontaktaufnahme': kontaktaufnahme,
+                    'email': email,
+                    'feedbacktext': feedbacktext,
+                    'verbesserung': verbesserung,
+                    'rating': rating,
+                }
+                conn_local.execute(sa.text(sql_text), [values])
+                conn_local.commit()
         except Exception as excp:
             rberi_lib.QMessageBoxB('ok', 'Konnte das Feedback leider nicht speichern. ', 'Datenbankfehler', str(excp),
                                    qss=bd.get_qss()).exec_()
@@ -1355,6 +1155,7 @@ class _UiSearch(QWidget):
 
     def eventFilter(self, a0, a1: QEvent):
         if a1 == QtGui.QKeyEvent:
+            a1: QtGui.QKeyEvent
             if bd.get_debug():
                 print(f"a0={a0}, a1={a1}")
             if a1.key() == Qt.Key_Return:
@@ -1366,10 +1167,16 @@ class _UiSearch(QWidget):
     def __connect(self):
         self.search_ui.BTN_art_plus.clicked.connect(self.art_plus)
         self.search_ui.BTN_ringer_plus.clicked.connect(self.ringer_plus)
-        self.search_ui.RAD_alle.toggled.connect(self.art_alle_toggled)
-        self.search_ui.RAD_alle_mri.toggled.connect(self.art_alle_mri_toggled)
         self.search_ui.BTN_tree_clear.clicked.connect(self.tree_clear)
         self.search_ui.BTN_ringerliste_loeschen.clicked.connect(self.tree_clear_ringer)
+        self.search_ui.BTN_show.clicked.connect(self.__show)
+        self.search_ui.BTN_export.clicked.connect(self.export)
+        self.search_ui.BTN_grafik.clicked.connect(self.grafik)
+        self.search_ui.BTN_saisongrenzen.clicked.connect(self.set_season_limits)
+        self.search_ui.BTN_close.clicked.connect(self.close)
+
+        self.search_ui.RAD_alle.toggled.connect(self.art_alle_toggled)
+        self.search_ui.RAD_alle_mri.toggled.connect(self.art_alle_mri_toggled)
         self.search_ui.RAD_heute.toggled.connect(self.heute)
         self.search_ui.RAD_gestern.toggled.connect(self.gestern)
         self.search_ui.RAD_woche_sa.toggled.connect(self.woche_sa)
@@ -1377,7 +1184,6 @@ class _UiSearch(QWidget):
         self.search_ui.RAD_monat.toggled.connect(self.monat)
         self.search_ui.RAD_saison.toggled.connect(self.saison)
         self.search_ui.RAD_saison_last.toggled.connect(self.saison_last)
-        self.search_ui.BTN_show.clicked.connect(self.__show)
         self.search_ui.RAD_spaltendiff_jahr.toggled.connect(self.spaltendiff_jahr)
         self.search_ui.RAD_spaltendiff_monat.toggled.connect(self.spaltendiff_monat)
         self.search_ui.RAD_spaltendiff_woche.toggled.connect(self.spaltendiff_woche)
@@ -1387,19 +1193,16 @@ class _UiSearch(QWidget):
         self.search_ui.RAD_spaltendiff_fangart.toggled.connect(self.spaltendiff_fangart)
         self.search_ui.RAD_spaltendiff_sex.toggled.connect(self.spaltendiff_sex)
         self.search_ui.RAD_spaltendiff_keine.toggled.connect(self.spaltendiff_keine)
-        self.search_ui.BTN_export.clicked.connect(self.export)
-        self.search_ui.BTN_grafik.clicked.connect(self.grafik)
+        self.search_ui.RAD_spaltendiff_beringer.toggled.connect(self.spaltendiff_beringer)
+
         self.search_ui.TREE_arten.itemDoubleClicked.connect(self.doppelklick_tree_arten)
         self.search_ui.TREE_ringer.itemDoubleClicked.connect(self.doppelklick_tree_ringer)
-        self.search_ui.BTN_saisongrenzen.clicked.connect(self.set_season_limits)
-        self.search_ui.BTN_close.clicked.connect(self.close)
+
         self.search_ui.CHB_normiert.toggled.connect(lambda: self.toggle_normiert('inkl'))
         self.search_ui.CHB_normiert_exkl.toggled.connect(lambda: self.toggle_normiert('exkl'))
         self.search_ui.CHB_zeilendiff_summen.toggled.connect(self.zeilensummen)
         self.search_ui.CHB_summen.toggled.connect(self.summen)
-        self.search_ui.RAD_spaltendiff_beringer.toggled.connect(self.spaltendiff_beringer)
-
-        # self.search_ui.CMB_art.keyPressEvent.connect(self.enter_pressed)
+        self.search_ui.CHB_median.toggled.connect(self.median_toggled)
 
     def __disconnect(self):
         self.search_ui.BTN_art_plus.clicked.disconnect(self.art_plus)
@@ -1433,20 +1236,23 @@ class _UiSearch(QWidget):
     # def enter_pressed(self, e: QKeyEvent):
 
     def __fill(self):
-        self.df_arten = pd.read_sql("SELECT deutsch, esf_kurz, mri_art FROM arten", engine)
-        self.df_arten.sort_values(by='deutsch', inplace=True)
-        self.search_ui.CMB_art.addItems(self.df_arten['deutsch'])
-        self.search_ui.CMB_art.setCurrentIndex(-1)
+        with engine.connect() as conn_local:
+            self.df_arten = pd.read_sql_query(sa.text("SELECT deutsch, esf_kurz, mri_art FROM arten"), conn_local)
+            self.df_arten.sort_values(by='deutsch', inplace=True)
+            self.search_ui.CMB_art.addItems(self.df_arten['deutsch'])
+            self.search_ui.CMB_art.setCurrentIndex(-1)
 
-        self.df_ringer = pd.read_sql("SELECT nachname, vorname, ringer_new FROM ringer", engine)
-        self.df_ringer.sort_values(by='nachname', inplace=True)
-        self.search_ui.CMB_ringer.addItems(self.df_ringer['nachname'] + ", " + self.df_ringer['vorname'])
-        self.search_ui.CMB_ringer.setCurrentIndex(-1)
+            self.df_ringer = pd.read_sql_query(sa.text("SELECT nachname, vorname, ringer_new FROM ringer"), conn_local)
+            self.df_ringer.sort_values(by='nachname', inplace=True)
+            self.search_ui.CMB_ringer.addItems(self.df_ringer['nachname'] + ", " + self.df_ringer['vorname'])
+            self.search_ui.CMB_ringer.setCurrentIndex(-1)
 
         self.search_ui.DTE_von.setDate(datetime.today())
         self.search_ui.DTE_von.setTime(QTime(0, 0, 0, 0))
         self.search_ui.DTE_bis.setDate(datetime.today())
         self.search_ui.DTE_bis.setTime(QTime(23, 59, 59, 999))
+        self.search_ui.CHB_median.setChecked(False)
+        self.search_ui.CHB_alle_faenge.setChecked(False)
 
         self.search_ui.TREE_arten.resizeColumnToContents(0)
 
@@ -1455,6 +1261,11 @@ class _UiSearch(QWidget):
             tree_item.setText(0, "Amsel")
             tree_item.setText(1, "TURMER")
             self.search_ui.TREE_arten.addTopLevelItem(tree_item)
+
+    def median_toggled(self):
+        if self.search_ui.CHB_median.isChecked():
+            self.search_ui.CHB_erstfang.setChecked(False)
+            self.search_ui.CHB_alle_faenge.setChecked(False)
 
     def art_plus(self):
         if self.search_ui.CMB_art.currentIndex() < 0:
@@ -1810,7 +1621,7 @@ class _UiSearch(QWidget):
         df_ringer_auswahl.sort_values(by='namevoll', inplace=True)
 
         """if self.get_diff('y') + 1 > 5 and self.search_ui.CHB_normiert.isChecked():
-            df_jahresanzahl = pd.read_sql('SELECT fangart FROM esf WHERE jahr >= ' + str(start['y']) + ' and jahr <= ' +
+            df_jahresanzahl = pd.read_sql_query('SELECT fangart FROM esf WHERE jahr >= ' + str(start['y']) + ' and jahr <= ' +
                                           str(ende['y']), engine)"""
         # für jede Art wird der Eintrag in dem RüCKGABE-df erzeugt.
         artcnt = 0
@@ -1981,7 +1792,7 @@ class _UiSearch(QWidget):
                     wochennummer = QDate(date_stamp_start.year, date_stamp_start.month,
                                          date_stamp_start.day).weekNumber()[0]
                     if self.search_ui.CHB_erstfang.isChecked():
-                        df_h = df_art.loc[(df_art["datum"] >= date_stamp_start) & (df_art["datum"] <= date_stamp_end) &
+                        df_h = df_art.loc[(df_art["datum"] >= date_stamp_start) & (df_art["datum"] < date_stamp_end) &
                                           ((df_art["fangart"] == 'e') | (df_art['fangart'] == 'k'))]
                         if len(df_h) > 0:
                             df_complex.loc[art_dt + ") e+k", str(date_stamp_start) + "...\n" + str(date_stamp_end) +
@@ -1990,7 +1801,7 @@ class _UiSearch(QWidget):
                             df_complex.loc[art_dt + ") e+k", str(date_stamp_start) + "...\n" + str(date_stamp_end) +
                                            "\n(week: " + str(wochennummer) + ")"] = 0
                     if self.search_ui.CHB_alle_faenge.isChecked():
-                        df_hilfs = df_art.loc[(df_art["datum"] >= date_stamp_start) & (df_art["datum"] <= date_stamp_end)]
+                        df_hilfs = df_art.loc[(df_art["datum"] >= date_stamp_start) & (df_art["datum"] < date_stamp_end)]
                         if len(df_hilfs) > 0:
                             df_complex.loc[art_dt + ") e+k+w", str(date_stamp_start) + "...\n" + str(date_stamp_end) +
                                            "\n(week: " + str(wochennummer) + ")"] = len(df_hilfs)
@@ -1998,7 +1809,7 @@ class _UiSearch(QWidget):
                             df_complex.loc[art_dt + ") e+k+w", str(date_stamp_start) + "...\n" + str(date_stamp_end) +
                                            "\n(week: " + str(wochennummer) + ")"] = 0
                     if self.search_ui.CHB_median.isChecked():
-                        df_h = df_art.loc[(df_art["datum"] >= date_stamp_start) & (df_art["datum"] <= date_stamp_end) &
+                        df_h = df_art.loc[(df_art["datum"] >= date_stamp_start) & (df_art["datum"] < date_stamp_end) &
                                           ((df_art["fangart"] == 'e') | (df_art['fangart'] == 'k'))]
                         df_h["datum"] = pd.to_datetime(df_h["datum"])
                         if not df_h.empty:
@@ -2186,9 +1997,10 @@ class _UiSearch(QWidget):
                     df_complex.loc[art_dt + " total", str(date_stamp_start) + " - " +
                                    str(date_stamp_end)] = len(df_hilfs)
                 if self.search_ui.CHB_median.isChecked():
-                    df_h = df_art.loc[(df_art["datum"] >= date_stamp_start) & (df_art["datum"] <= date_stamp_end) &
-                                      ((df_art["fangart"] == 'e') | (df_art['fangart'] == 'k'))]
+                    df_h: pd.DataFrame = df_art.loc[(df_art["datum"] >= date_stamp_start) & (df_art["datum"] <= date_stamp_end) &
+                                                    ((df_art["fangart"] == 'e') | (df_art['fangart'] == 'k'))]
                     df_h["datum"] = pd.to_datetime(df_h["datum"])
+
                     if not df_h.empty:
                         median = math.floor(df_h['datum'].astype('int64').median())
                         result = np.datetime64(median, "ns")
@@ -2247,7 +2059,7 @@ class _UiSearch(QWidget):
         self.search_ui.PRGB_dav.setValue(0)
         self.search_ui.PRGB_dav.setFormat("Auslesen der Datenbank ... %p%")
         try:
-            df = pd.read_sql(sql_text, engine)
+            df = pd.read_sql_query(sql_text, engine)
         except Exception as excp:
             rberi_lib.QMessageBoxB('ok', 'Auslesen der Datenbank fehlgeschlagen.', 'Datenbankfehler', str(excp),
                                    qss=bd.get_qss()).exec_()
@@ -2287,10 +2099,10 @@ class _UiSearch(QWidget):
             df.drop(
                 df[(df['datum'] == self.search_ui.DTE_bis.date()) & (df['uhrzeit'] > self.search_ui.DTE_bis.time().hour())].index,
                 inplace=True)
-        except Exception as err:
+        except Exception as _err:
             rberi_lib.QMessageBoxB('ok', 'Fehler bei der Eliminierung von Daten außerhalb der Stundengrenze. '
                                          'Stattdessen werden die beiden Datumswerte als Grenzwerte für die Abfrage genutzt.',
-                                   'Interner Fehler', str(err), qss=bd.get_qss()).exec_()
+                                   'Interner Fehler', str(_err), qss=bd.get_qss()).exec_()
 
         # jetzt wird der ergebnis-df gebastelt...
         self.df_ergebnis = self.__get_complex_df(df,
@@ -2638,14 +2450,9 @@ class _UiSearch(QWidget):
                         fsize = 'medium'
                     elif len(new_labels) > 20:
                         fsize = 'small'
-                    ax.legend(loc='upper left',
-                              ncols=df_trans.shape[0],
-                              labels=new_labels,
-                              fontsize=fsize,
-                              title=df.index[0] + ' im Zeitraum ' + self.search_ui.DTE_von.date().toString() + " - " +
-                                    self.search_ui.DTE_bis.date().toString(),
-                              )
-
+                    ax.legend(loc='upper left', ncols=df_trans.shape[0], labels=new_labels, fontsize=fsize,
+                              title=(df.index[0] + ' im Zeitraum ' + self.search_ui.DTE_von.date().toString() + " - " +
+                                     self.search_ui.DTE_bis.date().toString()))
                 plt.show()
 
             except TypeError as t:
@@ -2785,20 +2592,20 @@ class _UiWiederfangRanking(QDialog):
         else:
             nmb = int(nmb_txt)
             if nmb < 5:
-                if rberi_lib.QMessageBoxB('ny', "Wiederfangliste mit allen Wiederfängen weniger als " + str(nmb) + " wirklich "
-                                                                                                                   "ausgeben? Das "
-                                                                                                                   "könnte dauern "
-                                                                                                                   ".... ",
-                                          "Warnung!").exec_() == QMessageBox.Accepted:
+                if (rberi_lib.QMessageBoxB('ny', "Wiederfangliste mit allen Wiederfängen weniger als " + str(nmb) +
+                                                 "wirklich ausgeben? Das könnte dauern .... ", "Warnung!").exec_() ==
+                        QMessageBox.Accepted):
                     nmb = int(nmb_txt)
                 else:
-                    nmw = 5
+                    nmb = 5
         sql += start + "' and datum <= '" + ende + "' GROUP BY ringnummer HAVING COUNT(*) > " + str(
             nmb) + " ORDER BY RingAnz DESC"
         try:
-            df_wfr = pd.read_sql(sql, engine)
-        except Exception as err:
-            rberi_lib.QMessageBoxB('ok', 'Datenbankfehler. Siehe Details.', 'Datenbankfehler', str(err), qss=bd.get_qss()).exec_()
+            with engine.connect() as conn_local:
+                df_wfr = pd.read_sql_query(sa.text(sql), conn_local)
+        except Exception as fehler:
+            rberi_lib.QMessageBoxB('ok', 'Datenbankfehler. Siehe Details.', 'Datenbankfehler', str(fehler),
+                                   qss=bd.get_qss()).exec_()
             return
 
         df_wfr['Erstes Datum'] = ''
@@ -2811,20 +2618,21 @@ class _UiWiederfangRanking(QDialog):
             self.ui.PRGB.setValue(math.floor(row))
             self.ui.PRGB.setFormat("Datenbankabfrage ... %p%")
 
-            sql_t = "SELECT datum FROM esf WHERE ringnummer = '" + df_wfr['ringnummer'][row] + "'"
+            sql_text = "SELECT datum FROM esf WHERE ringnummer = '" + df_wfr['ringnummer'][row] + "'"
             try:
-                df_datum = pd.read_sql(sql_t, engine)
+                with engine.connect() as conn_local:
+                    df_datum = pd.read_sql_query(sa.text(sql_text), conn_local)
 
-            except Exception as err:
-                rberi_lib.QMessageBoxB('ok', 'Datenbankfehler. Siehe Details.', 'Datenbankfehler', str(err),
+            except Exception as _err:
+                rberi_lib.QMessageBoxB('ok', 'Datenbankfehler. Siehe Details.', 'Datenbankfehler', str(_err),
                                        qss=bd.get_qss()).exec_()
                 return
             df_datum_sort = df_datum.sort_values(by="datum", ascending=True).reset_index(drop=True)
             try:
                 df_wfr.loc[row, 'Erstes Datum'] = df_datum_sort['datum'][0].strftime('%d.%m.%Y')
                 df_wfr.loc[row, 'Letztes Datum'] = df_datum_sort['datum'][df_datum.shape[0] - 1].strftime('%d.%m.%Y')
-            except Exception as err:
-                print(str(err))
+            except Exception as _err:
+                print(str(_err))
                 return
 
         write_df_to_qtable(df_wfr, self.ui.TBL_resultat, {"progressbar": self.ui.PRGB})
@@ -2906,12 +2714,13 @@ class _UiSearchItem(QDialog):
             self.ui.CMB_art.setCurrentIndex(-1)
 
     def fill_arten(self):
-        sql_t = "SELECT deutsch, esf_kurz FROM arten"
+        sql_text = "SELECT deutsch, esf_kurz FROM arten"
         self.ui.CMB_art.addItem("")
         if not window.df_arten.empty:
             self.ui.CMB_art.addItems(window.df_arten['deutsch'])
         else:
-            df_tmp = pd.read_sql(sql_t, engine)
+            with engine.connect() as conn_local:
+                df_tmp = pd.read_sql_query(sa.text(sql_text), conn_local)
             df_tmp.sort_values(by='deutsch', inplace=True)
             self.ui.CMB_art.addItems(df_tmp['deutsch'])
 
@@ -2981,14 +2790,14 @@ class _UiSearchItem(QDialog):
         art_esf = ''
 
         if self.ui.CMB_art.currentIndex() >= 1:
-            sql_t = "SELECT deutsch, esf_kurz FROM arten"
+            sql_text = "SELECT deutsch, esf_kurz FROM arten"
             if not window.df_arten.empty:
                 art_esf = window.df_arten.query("deutsch=='" +
                                                 self.ui.CMB_art.currentText() + "'")["esf_kurz"].to_string()
                 art_esf = art_esf.split()
                 art_esf = str(art_esf[1])
             else:
-                df_tmp = pd.read_sql(sql_t, engine)
+                df_tmp = pd.read_sql_query(sql_text, engine)
                 query_txt = "deutsch=='" + self.ui.CMB_art.currentText() + "'"
                 art_esf_df = df_tmp.query(query_txt)["esf_kurz"]
                 if art_esf_df.empty:
@@ -3014,9 +2823,11 @@ class _UiSearchItem(QDialog):
             print(f"Starte Datenbankabfrage mit SQL_STRING = {sql_txt}")
             print(f'{datetime.now()}')
         try:
-            df_rnr = pd.read_sql(sql_txt, engine)
-        except Exception as err:
-            rberi_lib.QMessageBoxB('ok', 'Datenbankfehler. Siehe Details.', 'Datenbankfehler', str(err), qss=bd.get_qss()).exec_()
+            with engine.connect() as conn_local:
+                df_rnr = pd.read_sql_query(sa.text(sql_txt), conn_local)
+        except Exception as fehler:
+            rberi_lib.QMessageBoxB('ok', 'Datenbankfehler. Siehe Details.', 'Datenbankfehler', str(fehler),
+                                   qss=bd.get_qss()).exec()
             return
         if bd.get_debug():
             print(f"Ende der Datenbankabfrage")
@@ -3030,9 +2841,9 @@ class _UiSearchItem(QDialog):
         write_df_to_qtable(df_rnr, self.ui.TBL_results, {"progressbar": self.ui.progressBar})
         try:
             make_table_entries_pretty(self.ui.TBL_results, 1, 5, {"progressbar": self.ui.progressBar})
-        except Exception as err:
+        except Exception as _err:
             rberi_lib.QMessageBoxB('ok', 'Art und Beringer konnten nicht decodiert werden. Siehe Details.', 'Dekodierfehler',
-                                   str(err)).exec_()
+                                   str(_err)).exec_()
 
         self.ui.TBL_results.resizeColumnsToContents()
         self.ui.TBL_results.resizeRowsToContents()
@@ -3144,11 +2955,9 @@ class _UiSearchItem(QDialog):
                     sql_text = 'UPDATE esf SET ' + vals[1] + ' = ' + val + ' ' + 'WHERE ESF_ID = ' + vals[0]
                 print(sql_text)
                 try:
-                    cursor = engine.cursor()
-                    cursor.execute(sql_text)
-                    engine.commit()
-                    cursor.close()
-                    engine.reset()
+                    with engine.connect() as conn_local:
+                        conn_local.execute(sa.text(sql_text))
+                        conn_local.commit()
                 except Exception as excp:
                     rberi_lib.QMessageBoxB('ok', 'Leider ist ein Fehler aufgetreten. Siehe Details.',
                                            'Fehlermeldung', f"{excp}", qss=bd.get_qss()).exec_()
@@ -3268,14 +3077,16 @@ class _UiSearchItem(QDialog):
             self.set_changedStatus(True)
 
             try:
-                df_art = pd.read_sql('SELECT deutsch, esf_kurz, f_ex, f_s, w_ex, w_s, g_ex, g_s FROM arten', engine)
-                sql_txt = ("SELECT ringnummer, art, fangart, datum, uhrzeit, ringer, netz, fach, fett, muskel, esf.alter, "
-                           "geschlecht, moult1, moult2, moult3, teilfeder, fluegel, gewicht, frei4, verletzung, bemerkung, "
-                           "station, zentrale, f9, f7, f6, f5, f4, f3, f2, f1, s1, tarsus, frei2, frei3, frei1, "
-                           "mauserkarte, esf.ESF_ID FROM esf WHERE datum >= '" +
-                           self.ui.DE_start.date().toString(Qt.ISODate) + "' " +
-                           "and datum <= '" + self.ui.DE_end.date().toString(Qt.ISODate) + "' ")
-                df_esf = pd.read_sql(sql_txt, engine)
+                with engine.connect() as conn_local:
+                    df_art = pd.read_sql_query(sa.text('SELECT deutsch, esf_kurz, f_ex, f_s, w_ex, w_s, g_ex, g_s FROM arten'),
+                                               conn_local)
+                    sql_txt = ("SELECT ringnummer, art, fangart, datum, uhrzeit, ringer, netz, fach, fett, muskel, esf.alter, "
+                               "geschlecht, moult1, moult2, moult3, teilfeder, fluegel, gewicht, frei4, verletzung, bemerkung, "
+                               "station, zentrale, f9, f7, f6, f5, f4, f3, f2, f1, s1, tarsus, frei2, frei3, frei1, "
+                               "mauserkarte, esf.ESF_ID FROM esf WHERE datum >= '" +
+                               self.ui.DE_start.date().toString(Qt.ISODate) + "' " +
+                               "and datum <= '" + self.ui.DE_end.date().toString(Qt.ISODate) + "' ")
+                    df_esf = pd.read_sql_query(sa.text(sql_txt), conn_local)
             except Exception as excp:
                 rberi_lib.QMessageBoxB('ok', 'Keine Datenbankverbindung. ', "Datenbankverbinbung", str(excp),
                                        qss=bd.get_qss()).exec_()
@@ -3399,7 +3210,8 @@ class _UiSearchItem(QDialog):
                            self.ui.DE_start.date().toString(Qt.ISODate) + "' " +
                            "and datum <= '" + self.ui.DE_end.date().toString(Qt.ISODate) + "' " +
                            "and (fangart = 'w' or fangart = 'k')")
-                df_esf = pd.read_sql(sql_txt, engine)
+                with engine.connect() as conn_local:
+                    df_esf = pd.read_sql_query(sa.text(sql_txt), conn_local)
             except Exception as excp:
                 rberi_lib.QMessageBoxB('ok', 'Keine Datenbankverbindung. ', "Datenbankverbinbung", str(excp),
                                        qss=bd.get_qss()).exec_()
@@ -3412,7 +3224,7 @@ class _UiSearchItem(QDialog):
             self.set_changedStatus(True)  # teilweise lange ausführzeiten, daher lieber reject quittieren lassen
 
             progress_i = 0
-            self.ui.LBL_progress.setText("Erstfänge im Zeitraum:")
+            self.ui.progressBar.setFormat("Erstfänge im Zeitraum:")
             df_list = []
             for index, values in df_tmp_for_erstfaenge.iterrows():
                 self.ui.progressBar.setValue(int(progress_i / sum_of_entries * 1000))
@@ -3421,15 +3233,16 @@ class _UiSearchItem(QDialog):
                             "geschlecht, moult1, moult2, moult3, teilfeder, fluegel, gewicht, frei4, verletzung, bemerkung, "
                             "station, zentrale, f9, f7, f6, f5, f4, f3, f2, f1, s1, tarsus, frei2, frei3, frei1, "
                             "mauserkarte, esf.ESF_ID FROM esf WHERE ringnummer = '" + values['ringnummer'] + "' ")
-                df_tmp = pd.read_sql(sql_txt2, engine)
+                with engine.connect() as conn_local:
+                    df_tmp = pd.read_sql_query(sql_txt2, conn_local)
                 # df_esf = df_esf._append(df_tmp, ignore_index=True)
                 df_list.append(df_tmp)
                 progress_i += 1
-            df_esf = df_esf[0:0]
+            # df_esf = df_esf[0:0]
             df_esf = pd.concat(df_list)
 
         df_esf.sort_values(by='ringnummer', inplace=True)
-        self.ui.LBL_progress.setText("Fortschritt:")
+        self.ui.progressBar.setFormat("Fortschritt:")
         list_of_rnr = []
         matrix2mark = {}
         df_to_add_to_table = pd.DataFrame()
@@ -3456,7 +3269,7 @@ class _UiSearchItem(QDialog):
             5: [4, 'A', '4', 'A'],
             6: [4, 'B', '4', 'B'],
         }
-        self.ui.LBL_progress.setText("Fehlererkennung:")
+        self.ui.progressBar.setFormat("Fehlererkennung:")
         for index, values in df_esf.iterrows():
             self.ui.progressBar.setValue(int(progress_i / sum_of_entries * 1000))
             if values['ringnummer'] not in list_of_rnr:
@@ -3700,7 +3513,7 @@ class _UiSearchItem(QDialog):
                 # DONE  11) df_rnr übegeben mit Matrix=dict der Markierungen (Zeilen und Spalten) ==> keyword = markMatrix
 
             progress_i += 1
-        self.ui.LBL_progress.setText("Fortschritt:")
+        self.ui.progressBar.setFormat("Fortschritt:")
         self.ui.progressBar.setValue(1000)
 
         if bd.get_debug():
@@ -3811,21 +3624,24 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, user_internal, parent=None):
         super().__init__(parent)
 
+        self.sql_command_gui = None
+        self.nfa = None
+        self.tagebucheintrag_gui = None
         self.wfr = None
         self.viewPDF = None
         self.current_user = None
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         self.ui.TBL_wiederfaenge.setStyleSheet("""
-            font-size: 11px;
+            font-size: 12px;
         """)
         self.ui.CMB_verletzungscode.setStyleSheet("""
-            font-size: 11px;
+            font-size: 12px;
         """)
         label_obj = [self.ui.label_25, self.ui.label_26, self.ui.label_28, self.ui.label_27, self.ui.label_34]
         for obj in label_obj:
             obj.setStyleSheet("""
-                font-size: 11px;    
+                font-size: 12px;    
             """)
 
         self.setWindowTitle("Geier")
@@ -3867,6 +3683,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.no_click = None
         self.backup_window = None
         self.beringer_in_tab = False
+        self.last_id = 0
+        self.shown_id = 0
 
         self.db2 = {}
         self.oot = {}  # das ist ein Dictionary, welches die Eingaben für Flügellänge/Teilfeder/Masse speichert,
@@ -3884,8 +3702,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.CMB_art.setEnabled(False)
         self.ui.CMB_fangart.setEnabled(False)
         self.ui.INP_ringnummer.setEnabled(False)
-        self.ui.BTN_neuer_datensatz.setVisible(False)
-        self.ui.BTN_bearb_beenden.setVisible(False)
+        # self.ui.BTN_neuer_datensatz.setVisible(False)
+        # self.ui.BTN_bearb_beenden.setVisible(False)
 
         # lädt die Benutzereinstellungen
         self.benutzereinstellungen(True)
@@ -3909,10 +3727,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         try:
             # Usb(0x067B, 0x2305, 0)
-            self.printer = Usb(bd.get_drucker_vendor_id(), bd.get_drucker_typ_id(), 0)
-        except Exception as err:
+            self.printer = Usb(bd.get_drucker_vendor_id(), bd.get_drucker_typ_id())
+        except Exception as _err:
             self.printer = None
-            rberi_lib.QMessageBoxB("ok", 'Kein Drucker gefunden. Siehe Details.', 'Druckerfehler', str(err),
+            rberi_lib.QMessageBoxB("ok", 'Kein Drucker gefunden. Siehe Details.', 'Druckerfehler', str(_err),
                                    qss=bd.get_qss()).exec_()
 
     def __connect(self):
@@ -3949,8 +3767,10 @@ class MainWindow(QtWidgets.QMainWindow):
         # quittiert werden darf)
         self.ui.actionBeenden.setShortcut(QtGui.QKeySequence("Ctrl+Q"))
         self.ui.BTN_speichern_zeitgleich.setShortcut(QtGui.QKeySequence("Ctrl+S"))
-        self.ui.BTN_schliessen.setShortcut(QtGui.QKeySequence("Ctrl+C"))
+        self.ui.BTN_schliessen.setShortcut(QtGui.QKeySequence("Ctrl+W"))
         self.ui.actionHinzufuegen.setShortcut(QtGui.QKeySequence("Alt+E"))
+        self.ui.BTN_neuer_datensatz.setShortcut(QtGui.QKeySequence("Ctrl+N"))
+        self.ui.BTN_bearb_beenden.setShortcut(QtGui.QKeySequence("Esc"))
 
         self.shortcut_fleck = QShortcut(QtGui.QKeySequence("Ctrl+F"), self.ui.CHB_bruffleck)
         self.shortcut_fleck.activated.connect(self.ui.CHB_bruffleck.toggle)
@@ -3979,6 +3799,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.BTN_prev_img.clicked.connect(self.prev_pic_clicked)
         self.ui.BTN_snapshot.clicked.connect(self.snapshot)
         self.ui.BTN_kamera_testen.clicked.connect(self.kameratest)
+        self.ui.BTN_down.clicked.connect(lambda: self.display_entry(-1))
+        self.ui.BTN_up.clicked.connect(lambda: self.display_entry(1))
 
         # ComboBoxen
         # Alle Aktionen die mit den ComboBoxen und der Liste verknüpft sind
@@ -3986,7 +3808,6 @@ class MainWindow(QtWidgets.QMainWindow):
         # generiert wird, verknüpfen wir das hier erst, wenn fertig.
         self.ui.CMB_art.currentIndexChanged.connect(self.art_index_changed)
         self.ui.CMB_art.currentTextChanged.connect(self.art_text_changed)
-
 
         self.ui.CMB_beringer.currentIndexChanged.connect(self.beringer_changed)
         self.ui.CMB_fangart.currentIndexChanged.connect(self.fangart_changed)
@@ -4083,10 +3904,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.INP_fluegellaenge.setContextMenuPolicy(Qt.CustomContextMenu)
         self.ui.INP_fluegellaenge.customContextMenuRequested.connect(lambda: self.rightClickFunction("fluegellaenge"))
 
-        # self.ui.LBL_bild.enterEvent = lambda event: self.mouse_over_lbl(True)
-        # self.ui.LBL_bild.leaveEvent = lambda event: self.mouse_over_lbl(False)
-        # self.ui.GRA_view.enterEvent = lambda event: self.mouse_over_lbl(True)
-        # self.ui.GRA_view.leaveEvent = lambda event: self.mouse_over_lbl(False)
         self.ui.GRA_view.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
         self.ui.GRA_view.setOptimizationFlags(QGraphicsView.DontAdjustForAntialiasing)
 
@@ -4329,7 +4146,7 @@ class MainWindow(QtWidgets.QMainWindow):
                         self.ui.CMB_fach.setCurrentText(netz[1] + fach.upper())
             if source.objectName() == 'CMB_art' and len(self.ui.CMB_art.currentText()) > 0:
                 if self.ui.timeEdit.time().hour() != QTime.currentTime().hour():
-                    answer = rberi_lib.QMessageBoxB('ny', 'Zeit aktualisieren für diesen Datensatz?', 'Zeitanpassung',
+                    answer = rberi_lib.QMessageBoxB('yn', 'Zeit aktualisieren für diesen Datensatz?', 'Zeitanpassung',
                                                     qss=bd.get_qss()).exec_()
                     if answer == QMessageBox.Yes:
                         self.ui.timeEdit.setTime(QTime.currentTime())
@@ -4346,6 +4163,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     self.ui.INP_innenfuss.setEnabled(True)
 
         elif event.type() == QEvent.KeyPress:
+            event: QEvent.KeyPress
             if event.modifiers() & Qt.AltModifier:
                 if event.key() == QtCore.Qt.Key.Key_Down:
                     return super().eventFilter(source, event)
@@ -4372,6 +4190,7 @@ class MainWindow(QtWidgets.QMainWindow):
                         return True
             elif event.key() == QtCore.Qt.Key.Key_Delete or event.key() == QtCore.Qt.Key.Key_Backspace:
                 if source in self.cmb_list1 or source in self.cmb_list2:
+                    source: QComboBox
                     source.setCurrentIndex(-1)
                     return super().eventFilter(source, event)
             elif event.modifiers() & Qt.ControlModifier:
@@ -4434,6 +4253,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.ui.INP_masse.setFocus()
 
     def keyPressEvent(self, event: QEvent):
+        event: QtGui.QKeyEvent
         if event.key() == QtCore.Qt.Key.Key_Down:
             if (self.ui.INP_teilfeder.hasFocus() or self.ui.INP_fluegellaenge.hasFocus() or self.ui.INP_masse.hasFocus() or
                     self.ui.INP_teilfeder_2.hasFocus() or self.ui.INP_innenfuss.hasFocus()):
@@ -4606,12 +4426,11 @@ class MainWindow(QtWidgets.QMainWindow):
         user_settings.ui.BTN_speichern.clicked.connect(user_settings.accept)
         user_settings.ui.BTN_cancel.clicked.connect(user_settings.reject)
         user_settings.ui.TBTN_qss_select.clicked.connect(fileOpenDialog)
-        try:
-            engine.ping()
-        except Exception as err:
-            rberi_lib.QMessageBoxB('ok', 'Keine Datenbankverbindung.', 'Datenbankfehler', str(err), qss=bd.get_qss()).exec_()
+        if not get_connection_status():
             return
-        df_set = pd.read_sql("SELECT * FROM benutzer WHERE username = '" + self.get_current_user() + "'", engine)
+        with engine.connect() as conn_local:
+            df_set = pd.read_sql_query(sa.text("SELECT * FROM benutzer WHERE username = '" + self.get_current_user() + "'"),
+                                       conn_local)
         if df_set.empty:
             rberi_lib.QMessageBoxB('ok', 'Interner Fehler. Es wurden keine Benutzerdaten gefunden.', 'Interner Fehler.',
                                    ['SQL_TXT = ', '"SELECT * FROM benutzer WHERE username = self.get_current_user()',
@@ -4691,30 +4510,33 @@ class MainWindow(QtWidgets.QMainWindow):
             stylesheet_new.replace("\\", "/")
 
             try:
-                cursor = engine.cursor()
-                sql_t = ("UPDATE benutzer SET beringer_in_tab = '" + beringer_in_tab_neu + "', schriftgroesse = '"
-                         + schriftgroesse_neu + "', schnellauswahl = '" + schnellauswahl_neu + "', stylesheet = '"
-                         + stylesheet_new + "' WHERE username = '" + self.get_current_user() + "'")
-                cursor.execute(sql_t)
-                engine.commit()
-                cursor.close()
-            except Exception as err:
-                rberi_lib.QMessageBoxB('ok', 'Konnte die Änderungen nicht speichern.', 'Datenbankfehler', str(err),
-                                       qss=bd.get_qss()).exec_()
+
+                sql_text = ("UPDATE benutzer SET beringer_in_tab = '" + beringer_in_tab_neu + "', schriftgroesse = '"
+                            + schriftgroesse_neu + "', schnellauswahl = '" + schnellauswahl_neu + "', stylesheet = '"
+                            + stylesheet_new + "' WHERE username = '" + self.get_current_user() + "'")
+                with engine.connect() as conn_local:
+                    conn_local.execute(sa.text(sql_text))
+                    conn_local.commit()
+
+            except Exception as fehler:
+                rberi_lib.QMessageBoxB('ok', 'Konnte die Änderungen nicht speichern.', 'Datenbankfehler', str(fehler),
+                                       qss=bd.get_qss()).exec()
                 return
 
     def call_beringerverwaltung(self):
-        if get_connection_status(engine):
-            self.df_ringer = pd.read_sql("SELECT * FROM ringer", engine)
+        if get_connection_status():
+            with engine.connect() as conn_local:
+                self.df_ringer = pd.read_sql_query("SELECT * FROM ringer", conn_local)
             df_ringer = self.df_ringer
             beringerverwaltung_ui = Dialog_beringerverwaltung(self.berechtigung_beringer_speichern, df_ringer)
             self.__set_widget_stylesheet(beringerverwaltung_ui)
             if beringerverwaltung_ui.exec_() == QtWidgets.QMessageBox.Accepted:
                 # speichern:
                 eintrag = beringerverwaltung_ui.get_row_to_save()  # Bibiliothek
-                eintrag_vorhanden = pd.read_sql("SELECT * FROM ringer where nachname='"
-                                                + eintrag['nachname'] + "' and vorname='"
-                                                + eintrag['vorname'] + "'", engine)
+                with engine.connect() as conn_local:
+                    eintrag_vorhanden = pd.read_sql_query("SELECT * FROM ringer where nachname='"
+                                                          + eintrag['nachname'] + "' and vorname='"
+                                                          + eintrag['vorname'] + "'", conn_local)
                 if len(eintrag_vorhanden) >= 1 and eintrag['only-year'] == 0:
                     # Beringer bereits vorhanden ==> überschreiben?
                     msgb = QtWidgets.QMessageBox()
@@ -4737,13 +4559,13 @@ class MainWindow(QtWidgets.QMainWindow):
                                    eintrag['vorname'] + "' AND nachname = '" + eintrag['nachname'] + "'")
                         if bd.get_debug():
                             print(SQL_txt)
-                        cursor = engine.cursor()
-                        cursor.execute(SQL_txt)
-                        engine.commit()
-                        cursor.close()
+                        with engine.connect() as conn_local:
+                            conn_local.execute(sa.text(SQL_txt))
+                            conn_local.commit()
+
                         logging(window.get_current_user(), datetime.now(), "verwaltung",
-                                "Beringerverwaltung: '" + eintrag['nachname'] + ", " + eintrag['vorname'] +
-                                "' wurde geändert.")
+                                "Beringerverwaltung: <<" + eintrag['nachname'] + ", " + eintrag['vorname'] +
+                                ">> wurde geändert.")
                     except Exception as exc:
                         rberi_lib.QMessageBoxB('ok', "Fehler beim Speichern des Datensatzes für '" + eintrag['nachname'] +
                                                ", " + eintrag['vorname'] + "'. Siehe Details für die genaue Fehlerbeschreibung. "
@@ -4756,10 +4578,10 @@ class MainWindow(QtWidgets.QMainWindow):
                                    " WHERE vorname ='" + eintrag['vorname'] + "' AND nachname = '" +
                                    eintrag['nachname'] + "'")
                         # print(SQL_txt)
-                        cursor = engine.cursor()
-                        cursor.execute(SQL_txt)
-                        engine.commit()
-                        cursor.close()
+                        with engine.connect() as conn_local:
+                            conn_local.execute(sa.text(SQL_txt))
+                            conn_local.commit()
+
                         rberi_lib.QMessageBoxB('ok', "Aktivierung von '" + eintrag['vorname'] + " " + eintrag['nachname'] +
                                                "' für das Jahr " + datetime.now().date().strftime("%Y") + " erfolgreich!",
                                                "Erfolg", qss=bd.get_qss()).exec_()
@@ -4768,8 +4590,8 @@ class MainWindow(QtWidgets.QMainWindow):
                         # self.ui.CMB_beringer.setCurrentText(combo_txt)
                         self.ui.CMB_beringer.setCurrentIndex(self.ui.CMB_beringer.findText(combo_txt))
                         logging(window.get_current_user(), datetime.now(), "verwaltung",
-                                "Beringerverwaltung: '" + eintrag['nachname'] + ", " + eintrag['vorname'] +
-                                "' wurde für das Jahr " + datetime.now().date().strftime("%Y") + " freigeschaltet.")
+                                "Beringerverwaltung: <<" + eintrag['nachname'] + ", " + eintrag['vorname'] +
+                                ">> wurde für das Jahr " + datetime.now().date().strftime("%Y") + " freigeschaltet.")
                     except Exception as exc:
                         rberi_lib.QMessageBoxB('ok', "Fehler beim Speichern des Datensatzes für '" +
                                                eintrag['nachname'] + ", " + eintrag['vorname'] +
@@ -4785,20 +4607,35 @@ class MainWindow(QtWidgets.QMainWindow):
                                                          "kontaktiere den Support. ", "Interner Fehler", qss=bd.get_qss()).exec_()
                             return
                         station = "REIT"
-                        cursor = engine.cursor()
-                        cursor.execute("INSERT INTO ringer (ringer_alt, jahr, ringer_new, station, vorname, strasse, "
-                                       "plz, ort, land, telefon, telefax, email, anmerkung, zeige_wiederfaenge, "
-                                       "nachname) "
-                                       "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                                       (ringer_alt, jahr, ringer_neu, station, eintrag['vorname'],
-                                        eintrag['strasse'], str(eintrag['plz']), eintrag['stadt'], eintrag['land'],
-                                        eintrag['telefon'], eintrag['fax'], eintrag['email'], eintrag['anmerkung'],
-                                        eintrag['wiederfang'], eintrag['nachname']))
-                        engine.commit()
-                        cursor.close()
+                        sql_text = ("INSERT INTO ringer (ringer_alt, jahr, ringer_new, station, vorname, strasse, plz, ort,"
+                                    "land, telefon, telefax, email, anmerkung, zeige_wiederfaenge, nachname) VALUES (:ringer_alt,"
+                                    ":jahr, :ringer_new, :station, :vorname, :strasse, :plz, :ort, :land, :telefon, :telefax, "
+                                    ":email, :anmerkung, :zeige_wiederfaenge, :nachname)")
+
+                        values = {
+                            'ringer_alt': ringer_alt,
+                            'jahr': jahr,
+                            'ringer_new': ringer_neu,
+                            'station': station,
+                            'vorname': eintrag['vorname'],
+                            'strasse': eintrag['strasse'],
+                            'plz': str(eintrag['plz']),
+                            'ort': eintrag['stadt'],
+                            'land': eintrag['land'],
+                            'telefon': eintrag['telefon'],
+                            'telefax': eintrag['fax'],
+                            'email': eintrag['email'],
+                            'anmerkung': eintrag['anmerkung'],
+                            'zeige_wiederfaenge': eintrag['wiederfang'],
+                            'nachname': eintrag['nachname'],
+                        }
+                        with engine.connect() as conn_local:
+                            conn_local.execute(sa.text(sql_text), [values])
+                            conn_local.commit()
+
                         logging(window.get_current_user(), datetime.now(), "verwaltung",
-                                "Beringerverwaltung: '" + eintrag['nachname'] + ", " + eintrag['vorname'] +
-                                "' wurde hinzugefügt.")
+                                "Beringerverwaltung: <<" + eintrag['nachname'] + ", " + eintrag['vorname'] +
+                                ">> wurde hinzugefügt.")
                     except Exception as exc:
                         rberi_lib.QMessageBoxB('ok', "Fehler beim Speichern des Datensatzes für '" +
                                                eintrag['nachname'] + ", " + eintrag['vorname'] +
@@ -4822,11 +4659,15 @@ class MainWindow(QtWidgets.QMainWindow):
             new_lvl = newuser_ui.CMB_lvl.currentText()
             token_ = f.encrypt(new_pw.encode())
             if new_username not in df_benutzer.username.tolist():
-                cursor = engine.cursor()
-                cursor.execute("INSERT INTO benutzer (username, password, level) VALUES (%s, %s, %s)",
-                               (new_username, token_, new_lvl))
-                engine.commit()
-                cursor.close()
+                sql_text = "INSERT INTO benutzer (username, password, level) VALUES (:new_username, :token, :new_lvl)"
+                values = {
+                    'new_username': new_username,
+                    'token': token_,
+                    'new_lvl': new_lvl,
+                }
+                with engine.connect() as conn_local:
+                    conn_local.execute(sa.text(sql_text), [values])
+                    conn_local.commit()
             else:
                 rberi_lib.QMessageBoxB('ok', "Username bereits vorhanden!", "Fehler",
                                        "Welche weiteren Informationen erwartest Du hier? Der Username ist "
@@ -4925,7 +4766,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.wfr.exec_()
 
     def netzfachauswertung(self):
-        self.nfa = Netzfach_Auswertung(engine)
+        self.nfa = Netzfach_Auswertung(engine.connect())
         self.__set_widget_stylesheet(self.nfa)
         self.nfa.exec_()
 
@@ -4939,7 +4780,7 @@ class MainWindow(QtWidgets.QMainWindow):
             items.append(self.ui.LST_letzte_beringer.item(index).text())
         kwarg = {'ringer': items}
 
-        self.tagebucheintrag_gui = Tagebucheintrag(engine, bd.get_debug(), self.get_current_user(), **kwarg)
+        self.tagebucheintrag_gui = Tagebucheintrag(engine.connect(), bd.get_debug(), self.get_current_user(), **kwarg)
         self.__set_widget_stylesheet(self.tagebucheintrag_gui)
         self.tagebucheintrag_gui.exec_()
 
@@ -5120,7 +4961,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 if msgb.exec_() != QMessageBox.Yes:
                     return
             """else:
-                catched_this_year = pd.read_sql("SELECT * FROM ESF where ringnummer ='" +
+                catched_this_year = pd.read_sql_query("SELECT * FROM ESF where ringnummer ='" +
                                                 self.ui.INP_ringnummer.text() + "' and " +
                                                 "jahr = " + datetime.now().date().strftime("%Y"), engine)
                 if catched_this_year.empty:
@@ -5149,8 +4990,9 @@ class MainWindow(QtWidgets.QMainWindow):
                     ring_nr_such = ring_serie + "00" + ring_nr
                 elif len(ring_nr) == 5:
                     ring_nr_such = ring_serie + "0" + ring_nr"""
-            df_nr = pd.read_sql("SELECT ringnummer from esf where ringnummer = '" + ring_nr_such + "' OR " +
-                                "ringnummer = '" + ringnr + "'", engine)
+            with engine.connect() as conn_local:
+                df_nr = pd.read_sql_query(sa.text("SELECT ringnummer from esf where ringnummer = '" + ring_nr_such + "' OR " +
+                                                  "ringnummer = '" + ringnr + "'"), conn_local)
             if not df_nr.empty:
                 # self.fill_wiederfang_liste(self.ui.INP_ringnummer.text())
                 msgb = QMessageBox()
@@ -5202,27 +5044,27 @@ class MainWindow(QtWidgets.QMainWindow):
                 name = self.ui.CMB_beringer.currentText()
                 vorname = name[name.find(",") + 1:].strip()
                 nachname = name[:name.find(",")]
-                df_ringer = pd.read_sql("SELECT ringer_new from ringer where vorname = '" + vorname +
-                                        "' and nachname = '" + nachname + "'", engine)
+                with engine.connect() as conn_local:
+                    df_ringer = pd.read_sql_query(sa.text("SELECT ringer_new from ringer where vorname = '" + vorname +
+                                                          "' and nachname = '" + nachname + "'"), conn_local)
                 ringer = df_ringer.iloc[0, 0]
-                cursor = engine.cursor()
+
                 try:
-                    cursor.execute("Insert into esf (station, ringnummer, fangart, zentrale, datum, uhrzeit, "
-                                   "bemerkung, ringer, jahr) Values ('" + self.ui.CMB_station.currentText() + "', '" +
-                                   ring_nr_such + "', 'd', '" +
-                                   self.get_zentrale(self.ui.CMB_zentrale.currentText()) + "', '" +
-                                   self.ui.dateEdit.date().toString(Qt.ISODate) + "', " +
-                                   str(self.ui.timeEdit.time().hour()) + ", '" +
-                                   self.ui.PTE_bemerkung.toPlainText() + "', '" + str(ringer) + "', '" + str(date.today().year) +
-                                   "')")
+                    with engine.connect() as _local_conn:
+                        _local_conn.execute(sa.text("Insert into esf (station, ringnummer, fangart, zentrale, datum, uhrzeit, "
+                                                    "bemerkung, ringer, jahr) Values ('" + self.ui.CMB_station.currentText() +
+                                                    "', '" + ring_nr_such + "', 'd', '" +
+                                                    self.get_zentrale(self.ui.CMB_zentrale.currentText()) + "', '" +
+                                                    self.ui.dateEdit.date().toString(Qt.ISODate) + "', " +
+                                                    str(self.ui.timeEdit.time().hour()) + ", '" +
+                                                    self.ui.PTE_bemerkung.toPlainText() + "', '" + str(ringer) + "', '" +
+                                                    str(date.today().year) + "')"))
+                        _local_conn.commit()
                 except Exception as exp:
                     rberi_lib.QMessageBoxB('ok', 'Fehler bei der Anlage des defekten Ringes. Bitte Fehlermeldung anschauen und '
                                                  'ggf. nochmal probieren. Sonst Entwickler kontaktieren.', 'Interner Fehler',
                                            str(exp), qss=bd.get_qss()).exec()
-                    cursor.close()
                     return
-                engine.commit()
-                cursor.close()
                 self.clearEingabe()
             else:
                 rberi_lib.QMessageBoxB('ok', "Es sind nicht alle notwendigen Daten eingetragen. Siehe Details.",
@@ -5262,7 +5104,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 fangart = 'k'
 
             art = self.ui.CMB_art.currentText()
-            df_art = pd.read_sql("SELECT esf_kurz FROM arten WHERE deutsch ='" + art + "'", engine)
+            with engine.connect() as conn_local:
+                df_art = pd.read_sql_query(sa.text("SELECT esf_kurz FROM arten WHERE deutsch ='" + art + "'"), conn_local)
             teilfeder = self.ui.INP_teilfeder.text()
             if len(teilfeder) > 0:
                 teilfeder = teilfeder.replace(",", ".")
@@ -5338,10 +5181,11 @@ class MainWindow(QtWidgets.QMainWindow):
             nachname = name[:name.find(",")]
 
             try:
-                df_ringer = pd.read_sql("SELECT ringer_new from ringer where vorname = '" + vorname +
-                                        "' and nachname = '" + nachname + "'", engine)
+                with engine.connect() as conn_local:
+                    df_ringer = pd.read_sql_query(sa.text("SELECT ringer_new from ringer where vorname = '" + vorname +
+                                                          "' and nachname = '" + nachname + "'"), conn_local)
                 ringer = df_ringer['ringer_new'].iloc[0]
-            except Exception as err:
+            except Exception as _err:
                 rberi_lib.QMessageBoxB("ok", f"Der Beringer '{nachname}, {vorname}' konnte nicht gefunden werden! Bitte den "
                                              f"Beringer nochmal aus der Dropdownliste auswählen. Falls dies auch nicht "
                                              f"funktioniert, bitte vorerst einen anderen Beringer wählen und beim nächsten "
@@ -5349,7 +5193,7 @@ class MainWindow(QtWidgets.QMainWindow):
                                              f"bitte über das Menu ein Feedback abgeben und den Fehler beschreiben, "
                                              f"vor allem mit dem Namen des Beringers. Dann auch den Fehlertext aus den "
                                              f"Details hineinkopieren. Danke! Siehe "
-                                             f"Details.", "Interner Fehler", str(err)).exec_()
+                                             f"Details.", "Interner Fehler", str(_err)).exec_()
                 return
 
             if len(self.ui.CMB_netz.currentText()) == 0:
@@ -5467,13 +5311,12 @@ class MainWindow(QtWidgets.QMainWindow):
                 sql_text += self.db2['schnabelbreite'] + ", "
                 sql_text += self.db2['kerbe'] + ", "
                 sql_text += "(Null), (Null), (Null), (Null), "
-                print_txt = (print_txt + "; " + self.db2['tarsus'] + "; " + self.db2['hs2'] + "; " + self.db2['hs4'] + "; " +
-                             self.db2['hs5'] + "; " + self.db2['hs6'] + "; " + self.db2['hs7'] + "; " + self.db2['hs8'] + "; "
-                             + self.db2['hs9'] + "; " + self.db2['hs10'] + "; " + self.db2['as1'] + "; " + self.db2[
-                                 'mauserkarte'] + "; " + self.db2['tarsus'] + "; innenfuss=" + self.db2['innenfuss'] +
-                             "; schnabellaenge=" +
-                             self.db2['schnabellaenge'] + "; schnabelbreite=" + self.db2['schnabelbreite'] + "; kerbe=" +
-                             self.db2['kerbe'])
+                print_txt = (print_txt + "; " + str(self.db2['tarsus']) + "; " + str(self.db2['hs2']) + "; " +
+                             str(self.db2['hs4']) + "; " + str(self.db2['hs5']) + "; " + str(self.db2['hs6']) + "; " +
+                             str(self.db2['hs7']) + "; " + str(self.db2['hs8']) + "; " + str(self.db2['hs9']) + "; " +
+                             str(self.db2['hs10']) + "; " + str(self.db2['as1']) + "; " + str(self.db2['mauserkarte']) +
+                             "; innenfuss=" + str(self.db2['innenfuss']) + "; schnabellaenge=" + str(self.db2['schnabellaenge']) +
+                             "; schnabelbreite=" + str(self.db2['schnabelbreite']) + "; kerbe=" + str(self.db2['kerbe']))
             else:
                 sql_text += "0,0,0,0,0,0,0,0,0,0,0,'','','', (Null), 0,"
                 sql_text += str(_innenfuss) + ","
@@ -5500,19 +5343,19 @@ class MainWindow(QtWidgets.QMainWindow):
                     return
                 try:
                     lastnum = ringserienverwaltung.get_last_given_nmb(engine, ringtyp, rings)
-                except Exception as err:
+                except Exception as _err:
                     rberi_lib.QMessageBoxB("ok", "Die letzte vergebene Ringnummer konnte nicht ermittelt werden. Siehe Details.",
-                                           "Ringnummernfehler.", [str(err),
+                                           "Ringnummernfehler.", [str(_err),
                                                                   f'Ringtyp = {ringtyp}, Ringserie = {rings}, lastnum = '
                                                                   f'{lastnum}'], qss=bd.get_qss()).exec_()
                     return
 
                 """try:
                     engine.reset()
-                    lastnum = int(pd.read_sql("Select letztevergebenenummer FROM " + bd.get_tbl_name_ringserie() + " " +
+                    lastnum = int(pd.read_sql_query("Select letztevergebenenummer FROM " + bd.get_tbl_name_ringserie() + " " +
                                               "WHERE ringserie = '" + rings + "' AND status = 1",
                                               engine).iat[0, 0])
-                    lastnum_df = pd.read_sql("Select letztevergebenenummer FROM " + bd.get_tbl_name_ringserie() + " " +
+                    lastnum_df = pd.read_sql_query("Select letztevergebenenummer FROM " + bd.get_tbl_name_ringserie() + " " +
                                               "WHERE ringserie = '" + rings + "' AND status = 1", engine)
                     print(lastnum)
                 except Exception as excp:
@@ -5544,20 +5387,21 @@ class MainWindow(QtWidgets.QMainWindow):
                     return False
 
             try:
-                cursor = engine.cursor()
-                cursor.execute(sql_text)
-                engine.commit()
-                cursor.close()
-            except Exception as err:
+                with engine.connect() as conn_local:
+                    conn_local.execute(sa.text(sql_text))
+                    conn_local.commit()
+
+            except Exception as _err:
                 rberi_lib.QMessageBoxB('ok', 'Datensatz konnte nicht gespeichert werden. Schwerer Ausnahmefehler! Siehe '
-                                             'Details!', 'Ausnahmefehler', str(err)).exec_()
+                                             'Details!', 'Ausnahmefehler', str(_err)).exec_()
                 return
 
             if self.printer is None:
                 try:
-                    self.printer = Usb(bd.get_drucker_vendor_id(), bd.get_drucker_typ_id(), 0)
-                except Exception as err:
+                    self.printer = Usb(bd.get_drucker_vendor_id(), bd.get_drucker_typ_id())
+                except Exception as _err:
                     self.ui.statusbar.showMessage("Drucker nicht gefunden ...", 5000)
+                    print(f"Fehlermeldung beim Versuch den Drucker zu finden: {_err}")
             if self.printer is not None:
                 if bd.get_debug():
                     print(bd.get_drucker_typ_id())
@@ -5575,8 +5419,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 try:
                     for el in txt2print:
                         self.printer.textln("   " + el)
-                except Exception as err:
-                    self.ui.statusbar.showMessage("Drucken fehlgeschlagen ... Exception: " + str(err), 10000)
+                except Exception as _err:
+                    self.ui.statusbar.showMessage("Drucken fehlgeschlagen ... Exception: " + str(_err), 10000)
             else:
                 self.ui.statusbar.showMessage("Drucker nicht gefunden ... ", 5000)
 
@@ -5592,6 +5436,9 @@ class MainWindow(QtWidgets.QMainWindow):
     def ringnumber_edit_finished(self):
         self.ui.INP_ringnummer.editingFinished.disconnect(self.ringnumber_edit_finished)
         curr_rnr = self.ui.INP_ringnummer.text().strip()
+        if len(curr_rnr) > 0:
+            self.set_edit_status()
+
         curr_fangart = self.ui.CMB_fangart.currentText()
         if curr_fangart in ['w', 'k']:
             try:
@@ -5610,7 +5457,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def set_edit_status(self, b=True):
         self.edit_status = b
 
-    def fill_wiederfang_liste(self, rnr):
+    def fill_wiederfang_liste(self, rnr, change_fangart: bool = True):
         if len(rnr) <= 2:
             return
         rnr_serie = rnr[:2]
@@ -5619,15 +5466,15 @@ class MainWindow(QtWidgets.QMainWindow):
             rnr_nr = int(rnr[2:])
         except ValueError:
             if len(rnr) > 0:
-                a = rberi_lib.QMessageBoxB('ok', f"Hinterer Teil der Ringnummer {rnr[2:]} ist nicht numerisch. Sollte es "
-                                                 f"sich wirklich um eine korrekte Ringnummer handeln, bitte über Fremdfang "
-                                                 f"abhandeln oder die Ringnummer korrigieren.",
-                                           "Wertfehler", qss=bd.get_qss()).exec_()
+                rberi_lib.QMessageBoxB('ok', f"Hinterer Teil der Ringnummer {rnr[2:]} ist nicht numerisch. Sollte es "
+                                             f"sich wirklich um eine korrekte Ringnummer handeln, bitte über Fremdfang "
+                                             f"abhandeln oder die Ringnummer korrigieren.",
+                                       "Wertfehler", qss=bd.get_qss()).exec_()
                 self.ui.INP_ringnummer.setFocus(True)
                 return
 
         ring_such_text = rnr_serie + str(rnr_nr)
-        df_wiederfaenge = pd.read_sql("SELECT * from ESF where ringnummer ='" + ring_such_text + "'", engine)
+        df_wiederfaenge = pd.read_sql_query("SELECT * from ESF where ringnummer ='" + ring_such_text + "'", engine)
 
         if df_wiederfaenge.empty:
             rnr_nullen = ""
@@ -5642,10 +5489,12 @@ class MainWindow(QtWidgets.QMainWindow):
             elif rnr_nr < 10:
                 rnr_nullen = "00000"
             ring_such_text = str(rnr_serie) + rnr_nullen + str(rnr_nr)
-            df_wiederfaenge = pd.read_sql("SELECT * from ESF where ringnummer ='" + ring_such_text + "'", engine)
+            with engine.connect() as conn_local:
+                df_wiederfaenge = pd.read_sql_query(sa.text("SELECT * from ESF where ringnummer ='" + ring_such_text + "'"),
+                                                    conn_local)
 
-        catched_this_year = df_wiederfaenge.query("jahr == " + datetime.now().date().strftime("%Y"))
-        if catched_this_year.empty:
+        catched_this_year = df_wiederfaenge.query("jahr == " + str(datetime.now().year))
+        if catched_this_year.empty and change_fangart:
             self.ui.CMB_fangart.setCurrentText("k")
 
         if not df_wiederfaenge.empty:
@@ -5703,19 +5552,19 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.ui.CMB_art.currentIndex() < 0:
             return False
         art_d = self.ui.CMB_art.currentText()
-
-        ringtyp_df = pd.read_sql("SELECT ringtypMaleRef, ringtypFemaleRef from arten where deutsch = '" + art_d +
-                                               "'", engine)
+        with engine.connect() as conn_local:
+            ringtyp_df = pd.read_sql_query(sa.text("SELECT ringtypMaleRef, ringtypFemaleRef from arten where deutsch = '" +
+                                                   art_d + "'"), conn_local)
         ringtyp_m = int(ringtyp_df['ringtypMaleRef'].iloc[0])
-        ringtyp_f = 'None'
+        # ringtyp_f = 'None'
         try:
             if not isinstance(ringtyp_df['ringtypFemaleRef'].iloc[0], type(None)):
                 ringtyp_f = int(ringtyp_df['ringtypFemaleRef'].iloc[0])
             else:
                 ringtyp_f = 'None'
-        except TypeError as err:
+        except TypeError as _err:
             rberi_lib.QMessageBoxB('ok', 'Es konnte keine Ringserie für einen weiblichen Vogel gefunden werden.',
-                                   'Ringnummernfehler', str(err), qss=bd.get_qss()).exec_()
+                                   'Ringnummernfehler', str(_err), qss=bd.get_qss()).exec_()
             return False
 
         if ringtyp_f != 'None':
@@ -5774,9 +5623,10 @@ class MainWindow(QtWidgets.QMainWindow):
               -1 bei Fehler
         """
         try:
-            print(f"self.get_current_user = {self.get_current_user()}")
-            df_paketende = pd.read_sql("SELECT warnung_paketende FROM benutzer WHERE username = '" +
-                                       self.get_current_user() + "'", engine)
+            print(f"self.get_current_user = {self.get_current_user()}") if bd.get_debug() else None
+            with engine.connect() as conn_local:
+                df_paketende = pd.read_sql_query(sa.text("SELECT warnung_paketende FROM benutzer WHERE username = '" +
+                                                         self.get_current_user() + "'"), conn_local)
             value_paketende = df_paketende['warnung_paketende'].iloc[0]
             value_paketende = int(value_paketende)
             return value_paketende
@@ -5788,16 +5638,17 @@ class MainWindow(QtWidgets.QMainWindow):
     def art_text_changed(self, t: str):
         self.ui.CMB_art.setCurrentText(t.strip())
         schon_eintraege = False
-        print("länge ringnummer = " +  str(len(self.ui.INP_ringnummer.text())))
-        print("länge_netz = " + str(len(self.ui.CMB_netz.currentText())))
-        print("ö#länge_fach = " + str(len(self.ui.CMB_fach.currentText())))
-        print("index fangart = " + str(self.ui.CMB_fangart.currentIndex()))
+        if bd.get_debug():
+            print("länge ringnummer = " + str(len(self.ui.INP_ringnummer.text())))
+            print("länge_netz = " + str(len(self.ui.CMB_netz.currentText())))
+            print("ö#länge_fach = " + str(len(self.ui.CMB_fach.currentText())))
+            print("index fangart = " + str(self.ui.CMB_fangart.currentIndex()))
 
-
-        if (len(self.ui.INP_ringnummer.text()) > 0 or len(self.ui.CMB_netz.currentText()) > 0 or len(self.ui.CMB_fach.currentText()) > 0 or
+        if (len(self.ui.INP_ringnummer.text()) > 0 or len(self.ui.CMB_netz.currentText()) > 0 or len(
+                self.ui.CMB_fach.currentText()) > 0 or
                 self.ui.CMB_fangart.currentIndex() != 0):
             schon_eintraege = True
-        if self.ui.CHB_schnellauswahl.isChecked() and schon_eintraege == False:
+        if self.ui.CHB_schnellauswahl.isChecked() and not schon_eintraege:
             if t in ['te', 'Te', 'TE']:
                 self.ui.CMB_art.setCurrentText('Teichrohrsänger')
                 self.ui.CMB_fangart.setFocus(True)
@@ -5810,11 +5661,29 @@ class MainWindow(QtWidgets.QMainWindow):
             if t in ['fi', 'Fi', 'FI']:
                 self.ui.CMB_art.setCurrentText('Fitis')
                 self.ui.CMB_fangart.setFocus(True)
-            if t in ['Bl', 'bl', 'BL']:
-                self.ui.CMB_art.setCurrentText('Blaumeise')
-                self.ui.CMB_fangart.setFocus(True)
             if t in ['Ko', 'ko', 'KO']:
                 self.ui.CMB_art.setCurrentText('Kohlmeise')
+                self.ui.CMB_fangart.setFocus(True)
+            if t in ['Mö', 'mö', 'mo', 'Mo', 'MO', 'MÖ']:
+                self.ui.CMB_art.setCurrentText('Mönchsgrasmücke')
+                self.ui.CMB_fangart.setFocus(True)
+            if t in ['kl', 'Kl', 'KL']:
+                self.ui.CMB_art.setCurrentText('Klappergrasmücke')
+                self.ui.CMB_fangart.setFocus(True)
+            if t in ['do', 'Do', 'DO']:
+                self.ui.CMB_art.setCurrentText('Dorngrasmücke')
+                self.ui.CMB_fangart.setFocus(True)
+            if t in ['ei', 'Ei', 'EI']:
+                self.ui.CMB_art.setCurrentText('Eisvogel')
+                self.ui.CMB_fangart.setFocus(True)
+            if t in ['si', 'Si', 'SI']:
+                self.ui.CMB_art.setCurrentText('Singdrossel')
+                self.ui.CMB_fangart.setFocus(True)
+            if t in ['Am', 'am', 'AM']:
+                self.ui.CMB_art.setCurrentText('Amsel')
+                self.ui.CMB_fangart.setFocus(True)
+            if t in ['Za', 'za', 'ZA']:
+                self.ui.CMB_art.setCurrentText('Zaunkönig')
                 self.ui.CMB_fangart.setFocus(True)
 
     def art_index_changed(self) -> None:
@@ -5824,6 +5693,9 @@ class MainWindow(QtWidgets.QMainWindow):
         :return:
         """
         self.ui.CMB_fett.setEnabled(True)
+        if self.ui.CMB_art.currentIndex() >= 0:
+            self.set_edit_status()  # es steht was in Art Kombo drin ==> edit_status setzen
+
         if self.ui.CMB_art.currentIndex() >= 0:
             self.ui.CMB_fett.setEnabled(True)
             self.pos_in_pic_list = 0  # FALLS Dateien im Ordner existieren, fangen wir wieder bei Pos. 0 an.
@@ -5848,7 +5720,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
             if len(self.ui.INP_ringnummer.text()) > 0 and self.ui.CMB_fangart.currentText() == "e":
                 self.ui.INP_ringnummer.setText("")
-                self.ui.CMB_fangart.setCurrentIndex(-1)
+                self.ui.CMB_fangart.setCurrentIndex(0)
                 self.ui.CMB_fangart.setCurrentIndex(self.ui.CMB_fangart.findText("e"))
 
             if self.ui.CMB_art.currentText() == "Eisvogel":
@@ -5951,13 +5823,14 @@ class MainWindow(QtWidgets.QMainWindow):
         nachname = name[:name.find(",")]
 
         try:
-            df_ringer = pd.read_sql("SELECT * from ringer where vorname = '" + vorname +
-                                    "' and nachname = '" + nachname + "'", engine)
+            with engine.connect() as conn_local:
+                df_ringer = pd.read_sql_query(sa.text("SELECT * from ringer where vorname = '" + vorname +
+                                                      "' and nachname = '" + nachname + "'"), conn_local)
             ringer = df_ringer.iloc[0]
-        except Exception as err:
+        except Exception as fehler:
             if bd.get_debug():
                 print("Beim Lesen des Geburtstags ist ein Fehler aufgetreten: \n")
-                print(str(err))
+                print(str(fehler))
                 print("------------------------------------------------------")
             return
         if (df_ringer.shape[0] == 0) or ('bday' not in df_ringer.columns) or ('bday_done' not in df_ringer.columns):
@@ -5991,15 +5864,14 @@ class MainWindow(QtWidgets.QMainWindow):
                 if bd.get_debug():
                     print("SQl-Text zum ändern des Parameters bday_done in ringer nach Glückwünschen: " + sql_text)
                 try:
-                    _cursor = engine.cursor()
-                    _cursor.execute(sql_text)
-                    engine.commit()
-                    _cursor.close()
-                except Exception as err:
+                    with engine.connect() as _local_conn:
+                        _local_conn.execute(sa.text(sql_text))
+                        _local_conn.commit()
+                except Exception as fehler:
                     rberi_lib.QMessageBoxB('ok', 'Gratulationsdurchführung konnte nicht gespeichert werden. Bitte '
                                                  'Feedback/Fehlermeldung absetzen (Hilfe > Feedback) mit Text aus Details! Das '
                                                  'Speichern des Datensatzes ist kein Problem! '
-                                                 'Danke!', 'Fehler bei Speicherung BDay', str(err), qss=bd.get_qss()).exec_()
+                                                 'Danke!', 'Fehler bei Speicherung BDay', str(fehler), qss=bd.get_qss()).exec_()
 
     def check_for_needed_entries(self, fangart: str = 'xxx'):
         """
@@ -6018,7 +5890,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.INP_ringnummer.setText(self.format_ringnr(ring_nr))
         ringserie = self.ui.INP_ringnummer.text()[:2]
         # ringnr = self.ui.INP_ringnummer.text()[2:]
-        df_serie = pd.read_sql("SELECT ringserie from ringserie where ringserie = '" + ringserie + "'", engine)
+        with engine.connect() as conn_local:
+            df_serie = pd.read_sql_query(sa.text("SELECT ringserie from ringserie where ringserie = '" + ringserie + "'"),
+                                         conn_local)
         if fangart != "f":
             if len(df_serie) == 0:
                 missing_values.append("Ringserie unbekannt.")
@@ -6066,13 +5940,13 @@ class MainWindow(QtWidgets.QMainWindow):
     def get_zentrale(self, name="Vogelwarte Helgoland"):
         if self:
             pass
-        df_zentrale = pd.read_sql("SELECT Name, ZentraleKuerzel from zentralen", engine)
+        with engine.connect() as conn_local:
+            df_zentrale = pd.read_sql_query(sa.text("SELECT Name, ZentraleKuerzel from zentralen"), conn_local)
         kuerzel = df_zentrale[df_zentrale["Name"] == name]["ZentraleKuerzel"].values[0]
         if kuerzel and (kuerzel != ""):
             return kuerzel
         else:
             return "Fehler"
-        # string3 = df3[df3["name"]=="Amsel"]["eng"].values[0]
 
     def set_zentrale(self) -> bool:
         """
@@ -6084,9 +5958,9 @@ class MainWindow(QtWidgets.QMainWindow):
         zentrale_id = self.get_defaults()['Zentrale'].iloc[0]
 
         try:
-            df_zentrale = pd.read_sql(
-                "SELECT Name, ZentraleKuerzel from zentralen WHERE zentraleID = " + str(zentrale_id),
-                engine)
+            with engine.connect() as conn_local:
+                df_zentrale = pd.read_sql_query(sa.text("SELECT Name, ZentraleKuerzel from zentralen WHERE zentraleID = " +
+                                                        str(zentrale_id)), conn_local)
         except Exception as excp:
             rberi_lib.QMessageBoxB('ok', 'Zentrale konnte nicht gesetzt werden.', "Fehler",
                                    f"Exception: {excp}", qss=bd.get_qss()).exec_()
@@ -6151,9 +6025,10 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.ui.CMB_sex.setFocus(True)
                 return
             try:
-                erstfang = pd.read_sql("SELECT * FROM esf WHERE ringnummer = '" + self.ui.INP_ringnummer.text() + "' AND "
-                                                                                                                  "fangart = 'e'",
-                                       engine)
+                with engine.connect() as _local_conn:
+                    erstfang = pd.read_sql_query(
+                        sa.text("SELECT * FROM esf WHERE ringnummer = '" + self.ui.INP_ringnummer.text() +
+                                "' AND fangart = 'e'"), _local_conn)
                 if erstfang.empty:
                     rberi_lib.QMessageBoxB('ok', 'Kein Erstfang zu dieser Ringnummer gefunden. ', 'Ringnummernfehler',
                                            qss=bd.get_qss()).exec_()
@@ -6367,80 +6242,65 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def new_dataset(self):
         if self.get_edit_status():
-            rberi_lib.QMessageBoxB('ok', "Aktuell wird ein Datensatz bearbeitet. Speichere diesen oder beende die "
-                                         "Bearbeitung.", "Eingabe verwerfen?", qss=bd.get_qss()).exec_()
-            return
+            if rberi_lib.QMessageBoxB('yn', "Aktuell wird ein Datensatz bearbeitet. Speichere diesen oder beende die "
+                                            "Bearbeitung.", "Eingabe verwerfen?", qss=bd.get_qss()).exec_() == QMessageBox.No:
+                return
+        self.disconnect_all()
+        self.clearEingabe()
 
-        self.ui.CMB_art.setEnabled(True)
-        self.ui.CMB_fangart.setCurrentIndex(-1)
-        self.ui.CMB_art.setFocus()
-        self.ui.INP_ringnummer.setEnabled(True)
-        self.ui.CMB_fangart.setEnabled(True)
+        _widget_list: list = self.centralWidget().findChildren(QComboBox)
+        _widget_list.extend(self.centralWidget().findChildren(QLineEdit))
+        _widget_list.extend(self.centralWidget().findChildren(QDateEdit))
+        _widget_list.extend(self.centralWidget().findChildren(QTimeEdit))
+        _widget_list.extend(self.centralWidget().findChildren(QListWidget))
+        _widget_list.extend(self.centralWidget().findChildren(QPlainTextEdit))
+        _widget_list.extend(self.centralWidget().findChildren(QPushButton))
+        _widget_list.extend(self.centralWidget().findChildren(QCheckBox))
+
+        self.ui.CMB_art.objectName()
+        for _widget in _widget_list:
+            _widget.setEnabled(True)
+            if _widget.objectName() == "CMB_art":
+                _widget.setFocus(True)
+
+        self.ui.BTN_neuer_datensatz.setEnabled(False)
+        self.ui.BTN_down.setEnabled(False)
+        self.ui.BTN_up.setEnabled(False)
+
+        self.ui.CMB_fangart.setCurrentIndex(0)
         self.ui.timeEdit.setTime(QTime.currentTime())
         self.stunde = QTime.currentTime()
-        self.ui.CMB_fett.setEndabled(True)
         self.handle_fremdfang('save')
         self.set_edit_status(False)
+        self.connect_all()
 
     def edit_beenden(self):
-        """print_font = {
-            "height": 8,
-        }
-        # with Printer(printer_name='OKI DATA CORP ML6300FB-SC', linegap=0, auto_page=False) as printer:
-        with Printer(printer_name='OKI ML6300FB-SC K1', linegap=0) as printer:
-            printer.text("          Line1 Das ist ein Test!", font_config=print_font)
-            printer.text("          Line2 ... besser?", font_config=print_font)
-
-        printers = win32print.EnumPrinters(2, None, 2)
-        print_name = 'None'
-        for p in printers:
-            if "OKI" in p['pPrinterName']:
-                print_name = p['pPrinterName']
-
-        if print_name != 'None':
-            printHANDLE = win32print.OpenPrinter(print_name)
-
-        raw_data = bytes("          This is a test", "utf-8")
-
-        try:
-            pJOB = win32print.StartDocPrinter(printHANDLE, 1, ("test of raw data", None, "RAW"))
-            try:
-                win32print.StartPagePrinter(printHANDLE)
-                win32print.WritePrinter(printHANDLE, raw_data)
-                win32print.EndPagePrinter(printHANDLE)
-            finally:
-                win32print.EndDocPrinter(printHANDLE)
-        finally:
-            win32print.ClosePrinter(printHANDLE)"""
-
-        if (self.get_edit_status()) and (self.ui.CMB_art.currentIndex() != -1 or self.ui.INP_ringnummer.text() != ""):
-            msgb = QMessageBox()
-            msgb.setWindowTitle("Achtung ... ")
-            msgb.setText("Es wird gerade ein Datensatz bearbeitet. Bearbeitung wirklich abbrechen?")
-            msgb.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-            msgb.setDefaultButton(QMessageBox.No)
-            if msgb.exec_() != QMessageBox.Yes:
+        if (self.get_edit_status()) and (self.ui.CMB_art.currentIndex() != -1 or len(self.ui.INP_ringnummer.text()) > 0):
+            _answ = rberi_lib.QMessageBoxB('yn', 'Es wird gerade ein Datensatz bearbeitet. Bearbeitung wirklich abbrechen?',
+                                           'Achtung ...', qss=bd.get_qss()).exec()
+            if _answ != QMessageBox.Yes:
                 return
+
         self.clearEingabe('bearbeiten_beenden')
         self.handle_fremdfang('save')
 
     def schliessen(self):
         if (self.get_edit_status()) and (self.ui.CMB_art.currentIndex() != -1 or self.ui.INP_ringnummer.text() != ""):
-            msgb = QMessageBox()
-            msgb.setWindowTitle("Achtung ... ")
-            msgb.setText("Es wird gerade ein Datensatz bearbeitet. Wirklich schließen?")
-            msgb.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-            msgb.setDefaultButton(QMessageBox.No)
-            if msgb.exec_() != QMessageBox.Yes:
+            _answ = rberi_lib.QMessageBoxB("yn", "Es wird gerade ein Datensatz bearbeitet. Wirklich schließen?",
+                                           "Bearbeitung abbrechen?", qss=bd.get_qss()).exec()
+            if _answ != QMessageBox.Yes:
                 return
+        self.disconnect_all()
         self.clearEingabe('schliessen')
+        self.connect_all()
         self.handle_fremdfang('save')
 
     def clearEingabe(self, umfang=''):
         self.ui.CMB_art.setCurrentIndex(-1)
-        self.ui.CMB_fangart.setCurrentIndex(-1)
+        self.ui.CMB_fangart.setCurrentIndex(0)
         self.ui.CMB_netz.setCurrentIndex(-1)
         self.ui.CMB_fach.setCurrentIndex(-1)
+        self.ui.CMB_beringer.setCurrentText("")
         self.ui.CMB_fett.setCurrentIndex(-1)
         self.ui.CMB_muskel.setCurrentIndex(-1)
         self.ui.CMB_alter.setCurrentIndex(-1)
@@ -6472,23 +6332,139 @@ class MainWindow(QtWidgets.QMainWindow):
         self.set_save_allowed(False)
 
         if umfang == 'schliessen':
-            self.ui.CMB_beringer.setCurrentIndex(-1)
-            # self.ui.LST_letzte_beringer.clear()
-            self.ui.CMB_station.setCurrentIndex(-1)
-            self.ui.CMB_zentrale.setCurrentIndex(-1)
-            self.ui.CMB_art.setEnabled(False)
-            self.ui.INP_ringnummer.setEnabled(False)
             self.ui.actionHinzufuegen.setEnabled(True)
             self.set_edit_status(False)
             self.ui.widgetEingabe.setVisible(False)
         elif umfang == 'bearbeiten_beenden':
-            # Hier soll die letzten eingegebene Art gezeigt werden...
+            _widget_list: list = self.centralWidget().findChildren(QComboBox)
+            _widget_list.extend(self.centralWidget().findChildren(QLineEdit))
+            _widget_list.extend(self.centralWidget().findChildren(QDateEdit))
+            _widget_list.extend(self.centralWidget().findChildren(QTimeEdit))
+            _widget_list.extend(self.centralWidget().findChildren(QListWidget))
+            _widget_list.extend(self.centralWidget().findChildren(QPlainTextEdit))
+            _widget_list.extend(self.centralWidget().findChildren(QPushButton))
+            _widget_list.extend(self.centralWidget().findChildren(QCheckBox))
+            _widget_list.remove(self.ui.BTN_schliessen)
 
-            self.ui.CMB_art.setEnabled(False)
-            self.ui.INP_ringnummer.setEnabled(False)
-            self.ui.CMB_fangart.setEnabled(False)
+            for _widget in _widget_list:
+                _widget.setEnabled(False)
+
+            self.ui.BTN_down.setEnabled(True)
+            self.ui.BTN_up.setEnabled(True)
+
+            # hier holen wir uns den letzten Datensatz und zeigen ihn an:
+            try:
+                with engine.connect() as super_local_conn:
+                    df_max = pd.read_sql_query(sa.text("SELECT MAX(ESF_ID) FROM esf"), super_local_conn)
+            except Exception as _excp:
+                print(f"Fehler beim Holen des letzten Eintrags von esf: {_excp}") if bd.get_debug() else None
+                return
+
+            try:
+                last_id = int(df_max.iloc[0, 0])
+            except ValueError as _err:
+                print("Kann letzte ESF_ID nicht in Integer umwandeln! Fehlertext: " + str(_err)) if bd.get_debug() else None
+                return
+            self.last_id = last_id
+            self.shown_id = self.last_id
+
+            with engine.connect() as super_local_conn:
+                df_last_ind = pd.read_sql_query(sa.text("SELECT * FROM esf where ESF_ID = " + str(last_id)), super_local_conn)
+
+            self.ui.CMB_art.setCurrentText(get_artname_from_esfkurz(str(df_last_ind['art'].iloc[0])))
+            self.ui.CMB_fangart.setCurrentText(str(df_last_ind['fangart'].iloc[0]))
+            self.ui.INP_ringnummer.setText(str(df_last_ind['ringnummer'].iloc[0]))
+            self.ui.CMB_netz.setCurrentText(str(df_last_ind['netz'].iloc[0]))
+            self.ui.CMB_fach.setCurrentText(str(df_last_ind['fach'].iloc[0]))
+            self.ui.dateEdit.setDate(QDate.fromString(str(df_last_ind['datum'].iloc[0])))
+            self.ui.timeEdit.setTime(QTime.fromString(str(df_last_ind['uhrzeit'].iloc[0]) + ":00"))
+            self.ui.CMB_station.setCurrentText(str(df_last_ind['station'].iloc[0]))
+            self.ui.CMB_zentrale.setCurrentText(str(df_last_ind['zentrale'].iloc[0]))
+            self.ui.CMB_beringer.setCurrentText(str(get_beringer_from_kuerzel(df_last_ind['ringer'].iloc[0], 'n,v')))
+            self.ui.CMB_fett.setCurrentText(str(df_last_ind['fett'].iloc[0]))
+            self.ui.CMB_muskel.setCurrentText(str(df_last_ind['muskel'].iloc[0]))
+            self.ui.CMB_alter.setCurrentText(str(df_last_ind['alter'].iloc[0]))
+            self.ui.CMB_sex.setCurrentText(str(df_last_ind['geschlecht'].iloc[0]))
+            self.ui.CMB_mauser1.setCurrentText(str(df_last_ind['moult1'].iloc[0]))
+            self.ui.CMB_mauser2.setCurrentText(str(df_last_ind['moult2'].iloc[0]))
+            self.ui.CMB_mauser3.setCurrentText(str(df_last_ind['moult3'].iloc[0]))
+            self.ui.INP_teilfeder.setText(str(df_last_ind['teilfeder'].iloc[0]))
+            self.ui.INP_fluegellaenge.setText(str(df_last_ind['fluegel'].iloc[0]))
+            self.ui.INP_teilfeder_2.setText(str(df_last_ind['frei4'].iloc[0]))
+            self.ui.INP_innenfuss.setText(str(df_last_ind['frei2'].iloc[0]))
+            self.ui.INP_masse.setText(str(df_last_ind['gewicht'].iloc[0]))
+            self.ui.PTE_bemerkung.setPlainText(str(df_last_ind['bemerkung'].iloc[0]))
+            self.ui.CMB_verletzungscode.setCurrentText(get_verletzung_from_code(df_last_ind['verletzung'].iloc[0]))
+
             self.set_edit_status(False)
+            self.ui.BTN_neuer_datensatz.setEnabled(True)
             self.ui.BTN_neuer_datensatz.setFocus(True)
+
+    def display_entry(self, change_of_id: int = 1):
+        if self.last_id <= 0:
+            try:
+                with engine.connect() as super_local_conn:
+                    df_max = pd.read_sql_query(sa.text("SELECT MAX(ESF_ID) FROM esf"), super_local_conn)
+            except Exception as _excp:
+                print(f"Konnte den letzten Eintrag nicht holen: {_excp}") if bd.get_debug() else None
+                return
+
+            try:
+                last_id = int(df_max.iloc[0, 0])
+            except ValueError as _err:
+                print("Kann letzte ESF_ID nicht in Integer umwandeln! Fehlertext: " + str(_err)) if bd.get_debug() else None
+                return
+            self.last_id = last_id
+        if (self.shown_id + change_of_id) > self.last_id:
+            self.ui.BTN_up.setEnabled(False)
+        else:
+            self.ui.BTN_up.setEnabled(True)
+            self.shown_id = self.shown_id + change_of_id
+            try:
+                self.disconnect_all()
+            except Exception as _excp:
+                print(f'Disconnect_all hat nicht funktioniert! Fehlertext: {_excp}') if bd.get_debug() else None
+
+            with engine.connect() as super_local_conn:
+                df_to_show = pd.read_sql_query(sa.text("SELECT * FROM esf where ESF_ID = " + str(self.shown_id)),
+                                               super_local_conn)
+
+            if df_to_show.empty:
+                self.ui.statusbar.showMessage(f"Eintrag mit der ESF_ID {self.shown_id} scheint nicht existent oder anzeigbar. "
+                                              f"Bitte Fehler absetzen.", 5000)
+                self.connect_all()
+                return
+            self.ui.statusbar.clearMessage()
+            self.ui.statusbar.showMessage(f'ESF_ID = {self.shown_id}')
+            self.ui.CMB_art.setCurrentText(get_artname_from_esfkurz(str(df_to_show['art'].iloc[0])))
+            self.ui.CMB_fangart.setCurrentText(str(df_to_show['fangart'].iloc[0]))
+            self.ui.INP_ringnummer.setText(str(df_to_show['ringnummer'].iloc[0]))
+            self.ui.CMB_netz.setCurrentText(str(df_to_show['netz'].iloc[0]))
+            self.ui.CMB_fach.setCurrentText(str(df_to_show['fach'].iloc[0]))
+            self.ui.dateEdit.setDate(QDate.fromString(str(df_to_show['datum'].iloc[0])))
+            self.ui.timeEdit.setTime(QTime.fromString(str(df_to_show['uhrzeit'].iloc[0]) + ":00"))
+            self.ui.CMB_station.setCurrentText(str(df_to_show['station'].iloc[0]))
+            self.ui.CMB_zentrale.setCurrentText(str(df_to_show['zentrale'].iloc[0]))
+            self.ui.CMB_beringer.setCurrentText(str(get_beringer_from_kuerzel(df_to_show['ringer'].iloc[0], 'n,v')))
+            self.ui.CMB_fett.setCurrentText(str(df_to_show['fett'].iloc[0]))
+            self.ui.CMB_muskel.setCurrentText(str(df_to_show['muskel'].iloc[0]))
+            self.ui.CMB_alter.setCurrentText(str(df_to_show['alter'].iloc[0]))
+            self.ui.CMB_sex.setCurrentText(str(df_to_show['geschlecht'].iloc[0]))
+            self.ui.CMB_mauser1.setCurrentText(str(df_to_show['moult1'].iloc[0]))
+            self.ui.CMB_mauser2.setCurrentText(str(df_to_show['moult2'].iloc[0]))
+            self.ui.CMB_mauser3.setCurrentText(str(df_to_show['moult3'].iloc[0]))
+            self.ui.INP_teilfeder.setText(str(df_to_show['teilfeder'].iloc[0]))
+            self.ui.INP_fluegellaenge.setText(str(df_to_show['fluegel'].iloc[0]))
+            self.ui.INP_teilfeder_2.setText(str(df_to_show['frei4'].iloc[0]))
+            self.ui.INP_innenfuss.setText(str(df_to_show['frei2'].iloc[0]))
+            self.ui.INP_masse.setText(str(df_to_show['gewicht'].iloc[0]))
+            self.ui.PTE_bemerkung.setPlainText(str(df_to_show['bemerkung'].iloc[0]))
+            self.ui.CMB_verletzungscode.setCurrentText(get_verletzung_from_code(df_to_show['verletzung'].iloc[0]))
+            if self.ui.CMB_fangart.currentText() in ["w", "k"]:
+                self.fill_wiederfang_liste(self.ui.INP_ringnummer.text(), False)
+            else:
+                self.ui.TBL_wiederfaenge.setRowCount(0)
+            self.connect_all()
 
     def get_defaults(self) -> pd.DataFrame:
         """
@@ -6503,8 +6479,9 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         if self:
             pass
-        if get_connection_status(engine):
-            return pd.read_sql("SELECT * FROM defaults", engine)
+        if get_connection_status():
+            with engine.connect() as conn_local:
+                return pd.read_sql_query(sa.text("SELECT * FROM defaults"), conn_local)
 
     def changed(self, txt: str):
         if bd.get_debug():
@@ -6561,14 +6538,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.focusNextChild()
 
     def hinzufuegen(self):
-        if not get_connection_status(engine):
+        if not get_connection_status():
             rberi_lib.QMessageBoxB('ok', 'Keine Verbindung zur Datenbank! Bitte erneut verbinden.', 'Datenbankfehler',
                                    qss=bd.get_qss()).exec_()
             return
 
         self.disconnect_all()
         self.ui.widgetEingabe.setVisible(True)
-        self.set_edit_status()
+        # self.set_edit_status()
         self.stunde = QTime.currentTime()
 
         self.ui.CMB_art.setEnabled(True)
@@ -6579,7 +6556,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.dateEdit.setDate(QDate.currentDate())
         self.ui.timeEdit.setTime(QTime.currentTime())
 
-        df = pd.read_sql("SELECT * FROM arten", engine)
+        with engine.connect() as conn_local:
+            df = pd.read_sql_query(sa.text("SELECT * FROM arten"), conn_local)
         self.df_arten = df.sort_values(by='deutsch')
         # damit es hier nicht zur Erstfang-Generierung der Ringnummer kommt. Denn das Füllen der Combobox
         # triggert das Signal currentIndexChanged:
@@ -6592,15 +6570,16 @@ class MainWindow(QtWidgets.QMainWindow):
 
         if self.ui.CMB_fangart.count() <= 0:
             self.ui.CMB_fangart.addItems(['', 'e', 'w', 'k', 'd', 'f'])
-
-        df = pd.read_sql("SELECT * FROM netze", engine)
+        with engine.connect() as conn_local:
+            df = pd.read_sql_query(sa.text("SELECT * FROM netze"), conn_local)
         df_netze = df.sort_values(by='Netz')
 
         if self.ui.CMB_netz.count() <= 0:
             self.ui.CMB_netz.addItems(df_netze['Netz'])
         self.ui.CMB_netz.setCurrentIndex(-1)
 
-        df = pd.read_sql("SELECT * FROM netfaecher", engine)
+        with engine.connect() as _local_conn:
+            df = pd.read_sql_query(sa.text("SELECT * FROM netfaecher"), _local_conn)
         df_faecher = df.sort_values(by='Fach')
         if self.ui.CMB_fach.count() <= 0:
             self.ui.CMB_fach.addItems(df_faecher['Fach'])
@@ -6629,38 +6608,19 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.ui.CMB_mauser3.count() <= 0:
             self.ui.CMB_mauser3.addItems(['', '0', '1', '2', '3'])
 
-            """item1 = QtGui.QStandardItem()
-            item1.setData("1 - unvermausert/alt", Qt.DisplayRole)
-            item1.setData("1", Qt.UserRole)
-            # item1->setData(tr("Red"), Qt::DisplayRole);
-            # item1->setData("1", Qt::UserRole); # note: doesn't have to be a string.
-            item2 = QtGui.QStandardItem()
-            item2.setData("2 - aktive Handschwingenmauser", Qt.DisplayRole)
-            item2.setData("2", Qt.UserRole)
-
-            model = QtGui.QStandardItemModel()
-            model.setItem(0, 0, item1)
-            model.setItem(1, 0, item2)
-
-            self.ui.CMB_mauser3.setModel(model)"""
-
-            # self.ui.CMB_mauser3.setItemData(1, "1")
-            # self.ui.CMB_mauser3.setItemText(1, "unvermausert")
-
-            """self.ui.CMB_mauser3.addItem(['', '0', '1', '2', '3'], ['-', 'unklar', 'alt/unvermausert',
-                                                                   'aktive Handschwingenmauser', 'neu/vermausert'])"""
-
         self.ui.CMB_mauser3.setCurrentIndex(-1)
         if self.ui.CMB_verletzungscode.count() <= 0:
-            df_verletzung = pd.read_sql('SELECT * FROM verletzung', engine)
+            with engine.connect() as conn_local:
+                df_verletzung = pd.read_sql_query(sa.text('SELECT * FROM verletzung'), conn_local)
             list_verletzung = ['']
             for index, item in df_verletzung.iterrows():
-                txt = str(item[1]) + "; " + str(item[2]) + "; " + str(item[3])
+                txt = str(item.iloc[1]) + "; " + str(item.iloc[2]) + "; " + str(item.iloc[3])
                 list_verletzung.append(txt)
             self.ui.CMB_verletzungscode.addItems(list_verletzung)
             ownview = self.ui.CMB_verletzungscode.view()
             ownview.setFixedWidth(500)
-        df = pd.read_sql("SELECT * FROM stationen", engine)
+        with engine.connect() as conn_local:
+            df = pd.read_sql_query(sa.text("SELECT * FROM stationen"), conn_local)
         df_stationen = df.sort_values(by='Name')
         if self.ui.CMB_station.count() <= 0:
             self.ui.CMB_station.addItems(df_stationen['Name'])
@@ -6669,10 +6629,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.CMB_station.setCurrentText(df_stationen.at[df_stationen[df_stationen['stationenID'] ==
                                                                         self.get_defaults().loc[0].at[
                                                                             'Station']].index.item(), 'Name'])
-        # df.loc[5].at['B']
-        # df[df['A'] == 5].index.item() ==> Index der gesuchten Zeile
-
-        df = pd.read_sql("SELECT * FROM zentralen", engine)
+        with engine.connect() as conn_local:
+            df = pd.read_sql_query(sa.text("SELECT * FROM zentralen"), conn_local)
         df_zentralen = df.sort_values(by='Name')
         if self.ui.CMB_zentrale.count() <= 0:
             self.ui.CMB_zentrale.addItems(df_zentralen['Name'])
@@ -6692,7 +6650,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # ganz am Ende:
         self.ui.CMB_art.setFocus()
+        self.ui.BTN_neuer_datensatz.setEnabled(False)
         self.connect_all()
+        self.new_dataset()
 
     def make_dict_pretty(self, d: dict):
         if self:
@@ -6737,9 +6697,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def fill_ringer_current_year(self):
         self.ui.CMB_beringer.clear()
-        self.df_ringer = pd.read_sql("SELECT nachname, vorname, ringer_new, jahr FROM ringer", engine)
+        with engine.connect() as conn_local:
+            self.df_ringer = pd.read_sql_query(sa.text("SELECT nachname, vorname, ringer_new, jahr FROM ringer"), conn_local)
         df_ringer_year = self.df_ringer.query("jahr == " + datetime.now().date().strftime("%Y"))
-        # df = pd.read_sql("SELECT * FROM RINGER where jahr=" + datetime.now().date().strftime("%Y"), engine)
+        # df = pd.read_sql_query("SELECT * FROM RINGER where jahr=" + datetime.now().date().strftime("%Y"), engine)
         df_ringer = df_ringer_year.sort_values(by='nachname')
 
         for ringer in df_ringer.iterrows():
@@ -6749,13 +6710,19 @@ class MainWindow(QtWidgets.QMainWindow):
 
         gestern = datetime.now() - timedelta(1)
         gestern = gestern.strftime("%Y-%m-%d")
-        df_gestern = pd.read_sql("select distinct ringer from esf where datum >= '" + gestern + "'", engine)
+        with engine.connect() as conn_local:
+            df_gestern = pd.read_sql_query(sa.text("select distinct ringer from esf where datum >= '" + gestern + "'"),
+                                           conn_local)
         counter = 0
         self.ui.LST_letzte_beringer.clear()
         for ind, name in df_gestern.itertuples():
             counter += 1
-            nachname = pd.read_sql("select nachname from ringer where ringer_new = '" + name + "'", engine).iat[0, 0]
-            vorname = pd.read_sql("select vorname from ringer where ringer_new = '" + name + "'", engine).iat[0, 0]
+            with engine.connect() as conn_local:
+                nachname = pd.read_sql_query(sa.text("select nachname from ringer where ringer_new = '" + name + "'"),
+                                             conn_local).iat[0, 0]
+                vorname = pd.read_sql_query(sa.text("select vorname from ringer where ringer_new = '" + name + "'"),
+                                            conn_local).iat[
+                    0, 0]
             list_item = nachname + ", " + vorname
             self.ui.LST_letzte_beringer.addItem(list_item)
             if counter >= 5:
@@ -6836,8 +6803,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.actionRingserien.setEnabled(False)
         self.ui.actionPasswort_aendern.setEnabled(False)
         # STELLE (1)
-
-        berechtigungen = pd.read_sql("SELECT * FROM beringung.berechtigungen WHERE level = " + str(user_level), engine)
+        with (engine.connect() as conn_local):
+            berechtigungen = pd.read_sql_query(sa.text("SELECT * FROM beringung.berechtigungen WHERE level = " + str(
+                user_level)), conn_local)
         if not berechtigungen.empty:
             if berechtigungen['new_user'].iloc[0] == 'Y':
                 self.ui.actionNeuen_Benutzer_anlegen.setEnabled(True)
@@ -6863,8 +6831,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def programm_beenden(self, txt=None):
         if not self.get_edit_status():
-            if bd.get_debug():
-                print("programm_beenden aufgerufen")
+            print("programm_beenden aufgerufen") if bd.get_debug() else None
             logout(txt)
             app.exit(0)
         else:
@@ -6972,9 +6939,9 @@ class MainWindow(QtWidgets.QMainWindow):
                     "quot_d_max": "quo_f3_flg_d_pos", "show_g": "show_g_msg", "show_q": "show_q_msg"}
         else:
             return True
-
-        art_df = pd.read_sql('SELECT esf_kurz FROM arten WHERE deutsch = "' + self.ui.CMB_art.currentText() + '"',
-                             engine)
+        with engine.connect() as _local_conn:
+            art_df = pd.read_sql_query(sa.text('SELECT esf_kurz FROM arten WHERE deutsch = "' + self.ui.CMB_art.currentText() +
+                                               '"'), _local_conn)
         if art_df.empty:
             return True
 
@@ -6986,10 +6953,10 @@ class MainWindow(QtWidgets.QMainWindow):
             return True
 
         try:
-            df_vals = pd.read_sql('SELECT ' + vals['mw'] + ', ' + vals['stdab'] + ', ' + vals['faktor_min'] + ', ' +
-                                  vals['faktor_max'] + ', ' + vals['quot'] + ', ' + vals['quot_s'] + ', ' +
-                                  vals['quot_d_min'] + ', ' + vals['quot_d_max'] + ', ' + vals['show_g'] + ', ' +
-                                  vals['show_q'] + ' ' + 'FROM arten WHERE esf_kurz = "' + self.art + '"', engine)
+            df_vals = pd.read_sql_query('SELECT ' + vals['mw'] + ', ' + vals['stdab'] + ', ' + vals['faktor_min'] + ', ' +
+                                        vals['faktor_max'] + ', ' + vals['quot'] + ', ' + vals['quot_s'] + ', ' +
+                                        vals['quot_d_min'] + ', ' + vals['quot_d_max'] + ', ' + vals['show_g'] + ', ' +
+                                        vals['show_q'] + ' ' + 'FROM arten WHERE esf_kurz = "' + self.art + '"', engine)
         except Exception as excp:
             rberi_lib.QMessageBoxB('ok', 'Mittelwert und Standardabweichung konnten nicht '
                                          'ermittelt werden. Bitte Datenbankverbindung prüfen.', 'Fehler',
@@ -7092,9 +7059,7 @@ class MainWindow(QtWidgets.QMainWindow):
                                         f'{quot_faktor_max}x Sigma) = [{(quot - quot_faktor_min * quot_s):.2f}, '
                                         f'{(quot + quot_faktor_max * quot_s):.2f}]',
                                         f'Aktuelle Abweichung zum Mittel: {abs(quot - eingabe_quot):.1f} und damit '
-                                        f'um {abw} außerhalb des Bereichs.'
-                                        ]
-                                       , qss=bd.get_qss()).exec_()
+                                        f'um {abw} außerhalb des Bereichs.'], qss=bd.get_qss()).exec_()
                 _object.setFocus(True)
                 _object.selectAll()
                 internal_marker = True
@@ -7112,7 +7077,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def aktueller_status(self):
         txt_db = 'besteht NICHT!'
-        if get_connection_status(engine):
+        if get_connection_status():
             txt_db = 'besteht'
         txt_user = self.get_current_user()
         txt_level = self.get_current_userlevel()
@@ -7157,9 +7122,9 @@ class MainWindow(QtWidgets.QMainWindow):
         if not os.path.isdir(_path):
             try:
                 os.makedirs(_path)
-            except Exception as err:
+            except Exception as felher:
                 rberi_lib.QMessageBoxB('ok', 'Neues Verzeichnis konnte nicht angelegt werden. Siehe Details.', 'Fehler',
-                                       str(err)).exec_()
+                                       str(felher)).exec_()
                 return
 
         _filename = self.get_defaults()['Bilderverzeichnis'].tolist()[0] + "/" + self.ui.CMB_art.currentText() + "/" + _filename
@@ -7220,9 +7185,9 @@ class MainWindow(QtWidgets.QMainWindow):
             try:
                 img_pil.save(_filename)
                 self.ui.PTE_bemerkung.appendPlainText("Belegfoto: " + _filename)
-            except Exception as err:
+            except Exception as fehler:
                 rberi_lib.QMessageBoxB('ok', 'Speichern des Belegfotos fehlgeschlagen. Siehe Details.', 'Fehlermeldung',
-                                       str(err), qss=bd.get_qss()).exec_()
+                                       str(fehler), qss=bd.get_qss()).exec_()
 
         try:
             cam.release()
@@ -7233,11 +7198,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def kameratest(self):
         def klick(event, x, y, flags, param):
-
             if event == cv2.EVENT_LBUTTONDOWN:
                 self.no_click = False
-                if bd.get_debug():
-                    print("LEFTCLICK! in Kameratest")
+                print(f"flags: {flags}, param: {param}, x: {x}, y: {y}") if bd.get_debug() else None
+                print("LEFTCLICK! in Kameratest") if bd.get_debug() else None
 
         self.no_click = True
         cam_port = int(self.ui.CMB_camera_source.currentText())
@@ -7296,6 +7260,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def innenfuss(self):
         innenfuss_wert = self.ui.INP_innenfuss.text().strip()
+        if len(innenfuss_wert) <= 0:
+            return
         innenfuss_wert = innenfuss_wert.replace(",", ".")
         try:
             innenfuss_wert_float = float(innenfuss_wert)
@@ -7305,24 +7271,92 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         if (self.ui.CMB_art.currentText().lower() == "teichrohrsaenger" or (self.ui.CMB_art.currentText().lower() ==
                                                                             "teichrohrsänger")) and (innenfuss_wert_float < 26):
-            answ = rberi_lib.QMessageBoxB('yn', 'Bei der Innenfußspanne kleiner 26mm handelt es sich wohl um einen '
-                                                'Sumpfrohrsänger. '
-                                              'Soll die Art geändert werden?', 'Sumpf/Teich', qss=bd.get_qss()).exec()
-            if answ == QMessageBox.Yes:
+            _answ = rberi_lib.QMessageBoxB('yn', 'Bei der Innenfußspanne kleiner 26mm handelt es sich wohl um einen '
+                                                 'Sumpfrohrsänger. Soll die Art geändert werden?', 'Sumpf/Teich',
+                                           qss=bd.get_qss()).exec()
+            if _answ == QMessageBox.Yes:
                 self.ui.CMB_art.setCurrentText("Sumpfrohrsänger")
             self.ui.INP_masse.setFocus(True)
         elif (self.ui.CMB_art.currentText().lower() == "sumpfrohrsaenger" or (self.ui.CMB_art.currentText().lower() ==
-                                                                            "sumpfrohrsänger")) and (innenfuss_wert_float > 26):
-            answ = rberi_lib.QMessageBoxB('yn', 'Bei der Innenfußspanne größer 26mm handelt es sich wohl um einen '
-                                                'Teichrohrsänger. '
-                                                'Soll die Art geändert werden?', 'Sumpf/Teich', qss=bd.get_qss()).exec()
-            if answ == QMessageBox.Yes:
+                                                                              "sumpfrohrsänger")) and (innenfuss_wert_float > 26):
+            _answ = rberi_lib.QMessageBoxB('yn', 'Bei der Innenfußspanne größer 26mm handelt es sich wohl um einen '
+                                                 'Teichrohrsänger. '
+                                                 'Soll die Art geändert werden?', 'Sumpf/Teich', qss=bd.get_qss()).exec()
+            if _answ == QMessageBox.Yes:
                 self.ui.CMB_art.setCurrentText("Teichrohrsänger")
             self.ui.INP_masse.setFocus(True)
         elif innenfuss_wert_float == 26:
             rberi_lib.QMessageBoxB('ok', 'Unbestimmter Bereich. Jetzt bleibt nur noch der Walinder. Viel Erfolg!',
                                    'Sumpf/Teich', qss=bd.get_qss()).exec()
             self.walinder()
+
+
+def get_verletzung_from_code(code: str) -> str:
+    if code is None:
+        return ""
+    try:
+        code_int = int(code)
+    except ValueError as excp:
+        print(f"Kann den Verletzungscode '{code}' nicht in einen Integer umwandeln: " + str(excp)) if bd.get_debug() else None
+        return ""
+    try:
+        with engine.connect() as local_conn_this:
+            df_verletzung = pd.read_sql_query(sa.text("SELECT detailtext FROM verletzung WHERE code = " +
+                                                      str(code_int)), local_conn_this)
+    except Exception as _err:
+        print(f"Fehler beim Laden der Verletzungscodes. Es soll {code} gefunden werden. " + str(_err)) if (
+            bd.get_debug()) else None
+        return ""
+    if df_verletzung.empty:
+        return ""
+
+    return str(df_verletzung['detailtext'].iloc[0])
+
+
+def get_beringer_from_kuerzel(kuerzel: str, _format: str = 'n,v') -> str:
+    try:
+        with engine.connect() as local_conn_this:
+            df_ringer = pd.read_sql_query(sa.text("SELECT nachname, vorname FROM ringer WHERE ringer_new = '" + str(kuerzel) +
+                                                  "'"), local_conn_this)
+    except Exception as _err:
+        print(f"Fehler beim Laden der Beringer. Es soll {kuerzel} gefunden werden. " + str(_err)) if (
+            bd.get_debug()) else None
+        return ""
+    if df_ringer.empty:
+        return ""
+
+    if _format == 'n,v':
+        return str(df_ringer['nachname'].iloc[0] + ", " + df_ringer['vorname'].iloc[0])
+    elif _format == "n":
+        return str(df_ringer['nachname'].iloc[0])
+    elif _format == "v":
+        return str(df_ringer['vorname'].iloc[0])
+    elif _format == 'vn':
+        return str(df_ringer['vorname'].iloc[0] + " " + df_ringer['nachname'].iloc[0])
+    else:
+        return ""
+
+
+def get_artname_from_esfkurz(esfkurz: str, out: str = "d") -> str:
+    try:
+        with engine.connect() as local_conn_this:
+            df_art = pd.read_sql_query(sa.text("SELECT deutsch, englisch, lateinisch FROM arten WHERE esf_kurz = '" +
+                                               str(esfkurz) + "'"), local_conn_this)
+    except Exception as _err:
+        print(f"Fehler bei der Artbestimmung. Es soll {esfkurz} in die Sprache {out} übersetzt werden. " + str(_err)) if (
+            bd.get_debug()) else None
+        return ""
+
+    if df_art.empty:
+        return ""
+
+    if out == 'e':
+        return str(df_art['englisch'].iloc[0])
+    elif out == 'l':
+        return str(df_art['lateinisch'].iloc[0])
+    else:
+        return str(df_art['deutsch'].iloc[0])
+
 
 def kerbe(kerbe_val, art_obj, fluegel, alter):
     # 1 = Palustris (Sumpfi)
@@ -7435,10 +7469,11 @@ def make_table_entries_pretty(table: QTableWidget, col_art, col_ringer, *args):
         if isinstance(arg, dict):
             self_args = arg
     try:
-        df_art = pd.read_sql("SELECT deutsch, esf_kurz FROM arten", engine)
-        df_ringer = pd.read_sql("SELECT nachname, vorname, ringer_new FROM ringer", engine)
-    except Exception as err:
-        rberi_lib.QMessageBoxB("ok", "Datenbankfehler!", "Datenbankfehler", str(err), qss=bd.get_qss()).exec_()
+        with engine.connect() as _local_conn:
+            df_art = pd.read_sql_query(sa.text("SELECT deutsch, esf_kurz FROM arten"), _local_conn)
+            df_ringer = pd.read_sql_query(sa.text("SELECT nachname, vorname, ringer_new FROM ringer"), _local_conn)
+    except Exception as fehler:
+        rberi_lib.QMessageBoxB("ok", "Datenbankfehler!", "Datenbankfehler", str(fehler), qss=bd.get_qss()).exec_()
         return
 
     flag_progbar = False
@@ -7455,14 +7490,14 @@ def make_table_entries_pretty(table: QTableWidget, col_art, col_ringer, *args):
         print("i = " + str(i) + "; col_art = " + str(col_art))
         try:
             esf_ = table.item(i, col_art).text()
-        except Exception as err:  # AttributeError:
-            if bd.get_debug(): print("Errormessage in make_table_entries_pretty: " + str(err))
+        except Exception as fehler:  # AttributeError:
+            if bd.get_debug(): print("Errormessage in make_table_entries_pretty: " + str(fehler))
             continue
         if esf_ != "":
             try:
                 new_art = df_art.query("esf_kurz == '" + esf_ + "'")['deutsch'].iloc[0]
-            except IndexError as err:
-                rberi_lib.QMessageBoxB("ok", "Blöder Fehler. Connect to Entwickler :)", "Blöder Fehler!", str(err)).exec()
+            except IndexError as fehler:
+                rberi_lib.QMessageBoxB("ok", "Blöder Fehler. Connect to Entwickler :)", "Blöder Fehler!", str(fehler)).exec()
                 return
         else:
             new_art = ""
@@ -7482,10 +7517,6 @@ def write_df_to_qtable(df_to_integrate: pd.DataFrame, table: QTableWidget, *args
     col_to_mark = None
     row_offset = 0
     m2m = {}
-    faktor = 2
-
-    df_arten = pd.read_sql("SELECT * from arten", engine)
-    df_ringer = pd.read_sql("SELECT * from ringer", engine)
 
     for arg in args:
         if isinstance(arg, dict):
@@ -7518,13 +7549,17 @@ def write_df_to_qtable(df_to_integrate: pd.DataFrame, table: QTableWidget, *args
             elif kwargs[kw] == 'kerbe':
                 col_to_mark = 18
         elif kw == 'faktor':
-            faktor = kwargs[kw]
+            pass
+            # faktor = kwargs[kw]
 
     if bd.get_debug():
         print(f'table_rowcount_old = {table.rowCount()}')
     if operation == 'new':
-        headers = list(df_to_integrate)
-        headers = list(map(str.capitalize, headers))
+        headers_old = list(df_to_integrate)
+        headers = []
+        for header in headers_old:
+            headers.append(header.capitalize)
+        # headers = list(map(str.capitalize, headers))
         headers = ["Innenfuß" if x == "Frei2" else x for x in headers]
         headers = ["Kerbe" if x == "Frei4" else x for x in headers]
         table.clear()
@@ -7547,7 +7582,6 @@ def write_df_to_qtable(df_to_integrate: pd.DataFrame, table: QTableWidget, *args
 
     df_array = df_to_integrate.values
 
-    frame = 0
     flag_progbar = False
     if "progressbar" in m2m.keys():
         if isinstance(m2m['progressbar'], QProgressBar):
@@ -7559,74 +7593,9 @@ def write_df_to_qtable(df_to_integrate: pd.DataFrame, table: QTableWidget, *args
     for row in range(df_to_integrate.shape[0]):
         if flag_progbar:
             m2m['progressbar'].setValue(row)
-        try:
-            art_esw = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['deutsch'].iloc[0]
-        except Exception:
-            art_esw = "DEFEKT"
-        try:
-            ringer = (df_ringer.query("ringer_new == '" + df_array[row, 5] + "'")['nachname'].iloc[0] + ", " +
-                      df_ringer.query("ringer_new == '" + df_array[row, 5] + "'")['vorname'].iloc[0])
-        except Exception:
-            ringer = ""
-
-        teilfeder_mw = 0
-        teilfeder_stdab = 0
-        wing_mw = 0
-        wing_stdab = 0
-        masse_mw = 0
-        masse_stdab = 0
-
-        if art_esw != "DEFEKT":
-            teilfeder_mw = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['f_ex'].iloc[0]
-            teilfeder_stdab = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['f_s'].iloc[0]
-            wing_mw = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['w_ex'].iloc[0]
-            wing_stdab = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['w_s'].iloc[0]
-            masse_mw = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['g_ex'].iloc[0]
-            masse_stdab = df_arten.query("esf_kurz == '" + df_array[row, 1] + "'")['g_s'].iloc[0]
-
-        try:
-            teilfeder_mw_float = float(teilfeder_mw)
-        except ValueError:
-            teilfeder_mw_float = 0
-        try:
-            teilfeder_stdab_float = float(teilfeder_stdab)
-        except ValueError:
-            teilfeder_stdab_float = 0
-        try:
-            wing_mw_float = float(wing_mw)
-        except ValueError:
-            wing_mw_float = 0
-        try:
-            wing_stdab_float = float(wing_stdab)
-        except ValueError:
-            wing_stdab_float = 0
-        try:
-            masse_mw_float = float(masse_mw)
-            masse_stdab_float = float(masse_stdab)
-        except ValueError:
-            masse_mw_float = 0
-            masse_stdab_float = 0
 
         for col in range(df_to_integrate.shape[1]):
             item2add = QTableWidgetItem(str(df_array[row, col]))
-            """ match col:
-                case 1:
-                    # item2add.setToolTip(art_esw)
-                case 5:
-                    # item2add.setToolTip(ringer)
-                case 15:
-                    item2add.setToolTip(str("{:.1f}".format(teilfeder_mw_float - faktor * teilfeder_stdab_float)) + " --- " +
-                                        str("{:.1f}".format(teilfeder_mw_float)) + " --- " +
-                                        str("{:.1f}".format(teilfeder_mw_float + faktor * teilfeder_stdab_float)))
-                case 16:
-                    item2add.setToolTip(str("{:.1f}".format(wing_mw_float - faktor * wing_stdab_float)) + " --- " +
-                                        str("{:.1f}".format(wing_mw_float)) + " --- " +
-                                        str("{:.1f}".format(wing_mw_float + faktor * wing_stdab_float)))
-                case 17:
-                    item2add.setToolTip(str("{:.1f}".format(masse_mw_float - faktor * masse_stdab_float)) + " --- " +
-                                        str("{:.1f}".format(masse_mw_float)) + " --- " +
-                                        str("{:.1f}".format(masse_mw_float + faktor * masse_stdab_float)))
-            """
 
             table.setItem(row + row_offset, col, item2add)
             if col_to_mark and col == col_to_mark:
@@ -7651,12 +7620,12 @@ def write_df_to_qtable(df_to_integrate: pd.DataFrame, table: QTableWidget, *args
             esfid = 0
             try:
                 esfid = int(table.item(row, 37).text())
-            except Exception as err:
-                if err == ValueError:
+            except Exception as _err:
+                if _err == ValueError:
                     rberi_lib.QMessageBoxB('ok', 'Die ESF-ID wurde nicht gefunden. Ganz schlecht. Entwickler kontaktieren!',
-                                           'BÖSER FEHLER', qss=bd.get_qss()).exec_()
+                                           'BÖSER FEHLER', str(_err), qss=bd.get_qss()).exec_()
                     return
-                elif err == AttributeError:
+                elif _err == AttributeError:
                     return
 
             if esfid in m2m.keys():
@@ -7702,7 +7671,6 @@ def write_qtable_to_df(table):
 
 def change_pw():
     def save_clicked():
-        username = combo_user.currentText()
         if combo_user.currentIndex() < 0:
             rberi_lib.QMessageBoxB('ok', 'User auswählen!', "Kein User ...", qss=bd.get_qss()).exec_()
             ui.reject()
@@ -7711,9 +7679,9 @@ def change_pw():
         pw_new = input_pw_new.text()
         pw_wdh = input_pw_wdh.text()
         lvl = combo_level.currentText()
-
-        password = pd.read_sql("SELECT password FROM benutzer WHERE username = '" + combo_user.currentText() + "'",
-                               engine).iloc[0]
+        with (engine.connect() as _local_conn):
+            password = pd.read_sql_query(sa.text("SELECT password FROM benutzer WHERE username = '" + combo_user.currentText() +
+                                                 "'"), _local_conn).iloc[0]
         f_ = Fernet(bd.get_key())
         token_ = f_.decrypt(password[0])
         pw_old_saved = token_.decode()
@@ -7728,16 +7696,23 @@ def change_pw():
                                    "Passwort inkorrekt", qss=bd.get_qss()).exec_()
             ui.reject()
 
-        cursor = engine.cursor()
-        cursor.execute("UPDATE benutzer SET password = %s, level = %s WHERE username = %s", (token_new_pw, lvl, username))
-        engine.commit()
-        cursor.close()
+        sql_text = "UPDATE benutzer SET password = :pw, level = :lvl WHERE username = :user"
+        values = {
+            'pw': token_new_pw,
+            'lvl': lvl,
+            'username': user,
+        }
+        with engine.connect() as _local_conn:
+            _local_conn.execute(sa.text(sql_text), [values])
+            _local_conn.commit()
+
         ui.accept()
         return
 
     def user_changed():
-        u_level = pd.read_sql("SELECT level FROM benutzer WHERE username = '" + combo_user.currentText() + "'",
-                              engine).iloc[0]
+        with engine.connect() as conn_local:
+            u_level = pd.read_sql_query(sa.text("SELECT level FROM benutzer WHERE username = '" + combo_user.currentText() + "'"),
+                                        conn_local).iloc[0]
         combo_level.setCurrentText(str(u_level[0]))
 
     level = df_benutzer["level"].tolist()
@@ -7809,26 +7784,28 @@ def logout(bemerkung=""):
 
 
 def logging(user_bmi, zeitstempel, action, bemerkung):
-    pd.read_sql("SELECT * FROM login_logging", engine)
-    cursor_new = engine.cursor()
-    cursor_new.execute("INSERT INTO login_logging (username, timestamp, action, text) VALUES (%s, %s, %s, %s)",
-                       (user_bmi, zeitstempel, action, bemerkung))
-    engine.commit()
-    cursor_new.close()
+    sql_text: str = ("INSERT INTO login_logging (username, timestamp, action, text) VALUES ('" + str(user_bmi) + "', '" +
+                     str(zeitstempel) + "', '" + str(action) + "', '" + str(bemerkung) + "')")
+    _conn: Connection
+    with engine.connect() as _conn:
+        _conn.execute(sa.text(sql_text))
+        _conn.commit()
 
 
-def get_connection_status(connection):
+def get_connection_status():
     try:
-        connection.ping()
+        with engine.connect() as _local_conn:
+            _local_conn.execute(sa.text("SELECT 1"))
     except Exception as excp:
-        print(f"Exception: {excp}")
+        print(f"Datenbankverbindungstest über 'SELECT 1' fehlgeschlagen. Fehlertext: {excp}") if bd.get_debug() else None
         return False
     return True
 
 
-def db_connection(_host, _user, password, _port, _database):
+def db_connection(_host, _user, _pw, _port, _database):
     try:
-        return mariadb.connect(user=_user, password=password, host=_host, port=_port, database=_database)
+        return sa.create_engine("mariadb+mariadbconnector://" + _user + ":" + _pw + "@" + _host + ":" + _port + "/" + _database,
+                                pool_pre_ping=True)
     except mariadb.Error as excp:
         rberi_lib.QMessageBoxB("ok",
                                "Es konnte keine Verbindung zur Datenbank aufgebaut werden. Daher wird nun das "
@@ -7843,22 +7820,28 @@ def db_connection(_host, _user, password, _port, _database):
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
-
+    pd.options.mode.chained_assignment = None
     try:
         bd = BD('./basic_definitions.ini')
+    except FileNotFoundError as FNFerr:
+        print("Die Basic_definitions.ini Datei konnte nicht geladen werden. Stelle sicher, dass sie sich im selben Verzeichnis "
+              "befindet wie die 'main.py' die das Programm startet.")
+        sys.exit(app.exec_())
+
+    try:
         f = Fernet(bd.get_key())
         token = f.decrypt(bd.get_p())
         pw = token.decode()
         host = bd.get_host()
         user = bd.get_user()
-        port = bd.get_port()
+        port = str(bd.get_port())
         database = bd.get_database()
 
         if pw != '':
             engine = db_connection(host, user, pw, port, database)
-            # cursor = engine.cursor()
-            # lieber vor jedem Bedarf erzeugen und danach direkt wieder schließen.
-            df_benutzer = pd.read_sql("SELECT * FROM benutzer", engine)
+            with engine.connect() as conn:
+                df_benutzer = pd.read_sql_query("SELECT * FROM benutzer", conn)
+
             current_u = CurrentUser()
             form = Loginpage(df_benutzer, current_u)
 
@@ -7879,7 +7862,9 @@ if __name__ == '__main__':
                     if current_u.gettips():
                         print("Tipps anzeigen!") if bd.get_debug() else None
                         try:
-                            df_tips = pd.read_sql("SELECT tip FROM tips", engine)
+                            # df_tips = pd.read_sql_query("SELECT tip FROM tips", engine)
+                            with engine.connect() as local_conn:
+                                df_tips = pd.read_sql_query(sa.text("SELECT tip FROM tips"), local_conn)
                             tipsDialog = TipsDialog(df_tips['tip'].tolist(), bd.get_qss())
                             answ = tipsDialog.exec_()
                             print(str(answ)) if bd.get_debug() else None
@@ -7887,10 +7872,9 @@ if __name__ == '__main__':
                                 print("Es sollen keine Tips mehr angezeigt werden .... ") if bd.get_debug() else None
                                 try:
                                     sql_t = "UPDATE benutzer SET tips = 'N' WHERE username = '" + current_u.getuser() + "'"
-                                    cursor = engine.cursor()
-                                    cursor.execute(sql_t)
-                                    engine.commit()
-                                    cursor.close()
+                                    with engine.connect() as conn:
+                                        conn.execute(sa.text(sql_t))
+                                        conn.commit()
                                 except Exception as err:
                                     rberi_lib.QMessageBoxB('ok', 'Fehler beim Update der Tipsanzeige.', 'Datenbankfehler',
                                                            str(err),
@@ -7903,14 +7887,14 @@ if __name__ == '__main__':
                         if date.today().weekday() == 5:
                             try:
                                 sql_t = "UPDATE benutzer SET tips = 'Y' WHERE username = '" + current_u.getuser() + "'"
-                                cursor = engine.cursor()
-                                cursor.execute(sql_t)
-                                engine.commit()
-                                cursor.close()
+                                with engine.connect() as conn:
+                                    conn.execute(sa.text(sql_t))
+                                    conn.commit()
                             except Exception as err:
                                 rberi_lib.QMessageBoxB('ok', 'Fehler beim Update der Tipsanzeige.', 'Datenbankfehler',
                                                        str(err),
                                                        qss=bd.get_qss()).exec()
                     sys.exit(app.exec_())
     except Exception as e:
-        logout(f"schwerwiegender Fehler: {e}")
+        print("Fehler: " + str(e)) if bd.get_debug() else None
+        logout(f"Schwerwiegender Fehler: {e}")

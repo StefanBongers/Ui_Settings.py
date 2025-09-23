@@ -2522,6 +2522,20 @@
           </spacer>
          </item>
          <item>
+          <widget class="QPushButton" name="BTN_down">
+           <property name="text">
+            <string>&lt;</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="BTN_up">
+           <property name="text">
+            <string>&gt;</string>
+           </property>
+          </widget>
+         </item>
+         <item>
           <widget class="QPushButton" name="BTN_bearb_beenden">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
@@ -2577,7 +2591,7 @@
             </font>
            </property>
            <property name="text">
-            <string>Schließen (Strg + C)</string>
+            <string>Schließen (Strg + W)</string>
            </property>
            <property name="shortcut">
             <string>Ctrl+C</string>
@@ -3027,7 +3041,6 @@
   <tabstop>CMB_zentrale</tabstop>
   <tabstop>TBL_wiederfaenge</tabstop>
   <tabstop>BTN_neuer_datensatz</tabstop>
-  <tabstop>BTN_bearb_beenden</tabstop>
   <tabstop>BTN_schliessen</tabstop>
   <tabstop>CHB_schnellauswahl</tabstop>
   <tabstop>CMB_beringer</tabstop>

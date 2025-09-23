@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import datetime
-import mariadb
+import sqlalchemy as sa
 import pandas as pd
 from PyQt5.QtCore import QDate, Qt, QAbstractTableModel, QVariant
 
@@ -10,7 +10,7 @@ from Beringungsoberflaeche.SQL_GUI import Ui_Form
 
 
 class SQL_command(QWidget):
-    def __init__(self, db_eng: mariadb.Connection, debug: bool = False, current_user: str = "reit", parent=None, **kwargs):
+    def __init__(self, db_eng: sa.Engine, debug: bool = False, current_user: str = "reit", parent=None, **kwargs):
         super().__init__(parent)
         self.ui = Ui_Form()
         self.ui.setupUi(self)
