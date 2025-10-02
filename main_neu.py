@@ -4,6 +4,7 @@ import os
 import subprocess
 import time
 from ctypes import c_ushort, c_ulong
+from pprint import pprint
 from typing import Literal
 
 import cv2
@@ -39,7 +40,7 @@ from PyQt5.QtWidgets import (QPushButton, QLabel, QLineEdit, QGridLayout, QCombo
                              QTableWidgetItem, QTreeWidgetItem, QTreeWidgetItemIterator, QFileDialog, QWidget,
                              QVBoxLayout, QShortcut, QGraphicsPixmapItem, QGraphicsScene, QGraphicsView,
                              QMainWindow, QCheckBox, QRadioButton, QTableWidget, QHBoxLayout, QListWidget,
-                             QListWidgetItem, QPlainTextEdit, QProgressBar, QDateEdit, QTimeEdit)
+                             QListWidgetItem, QPlainTextEdit, QProgressBar, QDateEdit, QTimeEdit, QTableView)
 from PyQt5 import QtWidgets, QtGui, QtCore, sip
 from PyQt5.QtCore import QDate, QTime, Qt, QEvent, QObject, QRegularExpression, QEventLoop, QTimer, QSortFilterProxyModel
 from cryptography.fernet import Fernet
@@ -112,6 +113,37 @@ class DEV_BROADCAST_VOLUME(Structure):
         ("dbcv_unitmask", DWORD),
         ("dbcv_flags", WORD)
     ]
+
+
+class MyPandasModel(QtCore.QAbstractTableModel):
+    def __init__(self, data, parent=None):
+        QtCore.QAbstractTableModel.__init__(self, parent)
+        self._data = data
+
+    def rowCount(self, parent=None):
+        return len(self._data.values)
+
+    def columnCount(self, parent=None):
+        return self._data.columns.size
+
+    def data(self, index, role=Qt.DisplayRole):
+        if index.isValid():
+            if role == Qt.DisplayRole:
+                return str(self._data.iloc[index.row()][index.column()])
+        return None
+
+    def setData(self, index, value, role: int = ...) -> bool:
+        if role == Qt.EditRole:
+            self._data[index.row()][index.column()] = value
+        return True
+
+    def flags(self, index):
+        return Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsEditable
+
+    def headerData(self, col, orientation, role: int = ...):
+        if orientation == Qt.Horizontal and role == Qt.DisplayRole:
+            return self._data.columns[col]
+        return None
 
 
 class Backup_GUI(QDialog):
@@ -295,7 +327,7 @@ class Backup_GUI(QDialog):
         loop.exec_()
         self.close()
 
-    def check_usb_drive(self) -> bool:
+    def check_usb_drive(self) -> bool | None:
         c = wmi.WMI()
         print("USB-Gerät-Name erwartet (aus .ini) = " + bd.get_usb_vol_name()) if bd.get_debug() else None
         for disk in c.Win32_LogicalDisk(DriveType=2):
@@ -372,14 +404,13 @@ class Backup_GUI(QDialog):
         data = {
             'Art': ['Summe'],
         }
-        local_sum = 0
         for spaltenname, inhalt in df_to_html.items():
             print(f"Spaltenname: {spaltenname}")
             print(f"Daten der Spalte:\n{inhalt}\n")
             print(f"Summe vielleicht auch: {inhalt.sum()}")
             if spaltenname == "Art":
                 continue
-            data[spaltenname] = inhalt.sum()
+            data[str(spaltenname)] = inhalt.sum()
 
         df_to_add = pd.DataFrame(data)
         df_to_html = pd.concat([df_to_html, df_to_add], ignore_index=True, sort=False)
@@ -405,8 +436,8 @@ class Backup_GUI(QDialog):
                        '<link rel="stylesheet" href="https://www.w3schools.com/w3css/3/w3.css">\n'
                        '<body style="margin-left:20px;padding:5px">\n')
         html_gesamt = (html_gesamt + '<p style = "font-family: Century Gothic, sans-serif;font-size: 30px;color: #305496">' +
-                       'Tagesberingungen auf der Station "Die REIT" zwischen ' + datum_neu.strftime("%d.%m.%Y" +
-                       ' und ' + datetime.today().date().strftime("%d.%m.%Y") + ':</p>\n' + '<br>\n'))
+                       'Tagesberingungen auf der Station "Die REIT" zwischen ' + datum_neu.strftime("%d.%m.%Y") +
+                       ' und ' + datetime.today().date().strftime("%d.%m.%Y") + ':</p>\n' + '<br>\n')
         html_gesamt = (html_gesamt + html_table_blue_light + '\n' + '<br>\n' +
                        '<p style="font-family: Century Gothic, sans-serif;font-size: 12px;color: #305496" > ' +
                        'Wiederfunde sind Vögel die im aktuellen Jahr bereits beringt wurden und nochmal untersucht wurden.<br>'
@@ -1616,7 +1647,13 @@ class _UiSearch(QWidget):
         for ringer in beringer_kuerzel:
             namevoll = (self.df_ringer.query('ringer_new == "' + ringer + '"')['nachname'].iloc[0] + ", " +
                         self.df_ringer.query('ringer_new == "' + ringer + '"')['vorname'].iloc[0])
-            df_ringer_auswahl = df_ringer_auswahl._append({'ringer': ringer, 'namevoll': namevoll}, ignore_index=True)
+            data = {
+                'ringer': [ringer],
+                'namevoll': [namevoll],
+            }
+            df_to_append = pd.DataFrame(data)
+            df_ringer_auswahl = pd.concat([df_ringer_auswahl, df_to_append], ignore_index=True, sort=False)
+            # df_ringer_auswahl = df_ringer_auswahl._append({'ringer': ringer, 'namevoll': namevoll}, ignore_index=True)
 
         df_ringer_auswahl.sort_values(by='namevoll', inplace=True)
 
@@ -2270,7 +2307,7 @@ class _UiSearch(QWidget):
                             if bd.get_debug():
                                 print(f"Exception: {excp}")
 
-        tmp_df = tmp_df.set_index([tmp_df.columns[0]])
+        tmp_df = tmp_df.set_index(tmp_df.columns[0])
 
         return tmp_df
 
@@ -2451,7 +2488,7 @@ class _UiSearch(QWidget):
                     elif len(new_labels) > 20:
                         fsize = 'small'
                     ax.legend(loc='upper left', ncols=df_trans.shape[0], labels=new_labels, fontsize=fsize,
-                              title=(df.index[0] + ' im Zeitraum ' + self.search_ui.DTE_von.date().toString() + " - " +
+                              title=(str(df.index[0]) + ' im Zeitraum ' + self.search_ui.DTE_von.date().toString() + " - " +
                                      self.search_ui.DTE_bis.date().toString()))
                 plt.show()
 
@@ -2618,7 +2655,7 @@ class _UiWiederfangRanking(QDialog):
             self.ui.PRGB.setValue(math.floor(row))
             self.ui.PRGB.setFormat("Datenbankabfrage ... %p%")
 
-            sql_text = "SELECT datum FROM esf WHERE ringnummer = '" + df_wfr['ringnummer'][row] + "'"
+            sql_text: str = "SELECT datum FROM esf WHERE ringnummer = '" + str(df_wfr['ringnummer'][row]) + "'"
             try:
                 with engine.connect() as conn_local:
                     df_datum = pd.read_sql_query(sa.text(sql_text), conn_local)
@@ -3101,7 +3138,7 @@ class _UiSearchItem(QDialog):
             self.ui.progressBar.setValue(int(progress_i / sum_of_entries * 1000))
             entry = pd.DataFrame()
             if value['art']:
-                entry = df_art.query("esf_kurz=='" + value['art'] + "'")
+                entry = df_art.query("esf_kurz=='" + str(value['art']) + "'")
 
             if entry.empty:
                 continue
@@ -3202,7 +3239,33 @@ class _UiSearchItem(QDialog):
             if not los:
                 return
 
+            """
+                SELECT * FROM esf 
+                    WHERE ringnummer IN 
+                        (SELECT ringnummer FROM esf 
+                            WHERE (fangart = "w" OR fangart = "k") AND (datum <= "2024-07-10" AND datum >= "2024-07-01")
+                        )
+                ORDER BY ringnummer
+            """
+
             try:
+                sql_txt = ("SELECT ringnummer, art, fangart, datum, uhrzeit, ringer, netz, fach, fett, muskel, esf.alter, "
+                           "geschlecht, moult1, moult2, moult3, teilfeder, fluegel, gewicht, frei4, verletzung, bemerkung, "
+                           "station, zentrale, f9, f7, f6, f5, f4, f3, f2, f1, s1, tarsus, frei2, frei3, frei1, "
+                           "mauserkarte, esf.ESF_ID FROM esf WHERE ringnummer IN "
+                           "("
+                           "SELECT ringnummer FROM esf WHERE (fangart = 'w' OR fangart = 'k') AND (datum >= '"
+                           + self.ui.DE_start.date().toString(Qt.ISODate) + "' AND datum <= '"
+                           + self.ui.DE_end.date().toString(Qt.ISODate) + "')"
+                                                                          ") ORDER BY ringnummer")
+                with engine.connect() as conn_local:
+                    df_esf = pd.read_sql_query(sa.text(sql_txt), conn_local)
+            except Exception as excp:
+                rberi_lib.QMessageBoxB('ok', 'Fehler bei Datenbankabfrage. Siehe Details.', "Datenbankfehler", str(excp),
+                                       qss=bd.get_qss()).exec_()
+                return
+
+            """try:
                 sql_txt = ("SELECT ringnummer, art, fangart, datum, uhrzeit, ringer, netz, fach, fett, muskel, esf.alter, "
                            "geschlecht, moult1, moult2, moult3, teilfeder, fluegel, gewicht, frei4, verletzung, bemerkung, "
                            "station, zentrale, f9, f7, f6, f5, f4, f3, f2, f1, s1, tarsus, frei2, frei3, frei1, "
@@ -3224,7 +3287,7 @@ class _UiSearchItem(QDialog):
             self.set_changedStatus(True)  # teilweise lange ausführzeiten, daher lieber reject quittieren lassen
 
             progress_i = 0
-            self.ui.progressBar.setFormat("Erstfänge im Zeitraum:")
+            self.ui.progressBar.setFormat("Erstfänge zu Wiederfängen ...")
             df_list = []
             for index, values in df_tmp_for_erstfaenge.iterrows():
                 self.ui.progressBar.setValue(int(progress_i / sum_of_entries * 1000))
@@ -3235,11 +3298,9 @@ class _UiSearchItem(QDialog):
                             "mauserkarte, esf.ESF_ID FROM esf WHERE ringnummer = '" + values['ringnummer'] + "' ")
                 with engine.connect() as conn_local:
                     df_tmp = pd.read_sql_query(sql_txt2, conn_local)
-                # df_esf = df_esf._append(df_tmp, ignore_index=True)
                 df_list.append(df_tmp)
                 progress_i += 1
-            # df_esf = df_esf[0:0]
-            df_esf = pd.concat(df_list)
+            df_esf = pd.concat(df_list)"""
 
         df_esf.sort_values(by='ringnummer', inplace=True)
         self.ui.progressBar.setFormat("Fortschritt:")
@@ -3271,10 +3332,11 @@ class _UiSearchItem(QDialog):
         }
         self.ui.progressBar.setFormat("Fehlererkennung:")
         for index, values in df_esf.iterrows():
+            print("jetzt kommt Index = " + str(index)) if bd.get_debug() else None
             self.ui.progressBar.setValue(int(progress_i / sum_of_entries * 1000))
             if values['ringnummer'] not in list_of_rnr:
                 list_of_rnr.append(values['ringnummer'])
-                df_rnr = df_esf.query("ringnummer=='" + values['ringnummer'] + "'")
+                df_rnr = df_esf.query("ringnummer=='" + str(values['ringnummer']) + "'")
                 if df_rnr.empty:
                     continue
                 # DONE  0) wir brauchen ein Dataframe df_rnr mit nur EINER Ringnummer und dem Erstfang und allen Wiederfängen.
@@ -3294,13 +3356,12 @@ class _UiSearchItem(QDialog):
                     matrix2mark[key].append(1)
                     if 1 not in self.relevante_spalten:
                         self.relevante_spalten.append(1)
-                    for index2, art in df_rnr.iterrows():
+                    for (index2, art) in df_rnr.iterrows():
                         if art['fangart'] != 'e' and art['art'] != art_e:
-                            key = art['ESF_ID']
-                            if key not in matrix2mark.keys():
-                                matrix2mark[key] = []
+                            if art['ESF_ID'] not in list(matrix2mark.keys()):
+                                matrix2mark[art['ESF_ID']] = []
                                 df_to_add_to_table = pd.concat([df_to_add_to_table, art.to_frame().T])
-                            matrix2mark[key].append(1)
+                            matrix2mark[art['ESF_ID']].append(1)
                             if 1 not in self.relevante_spalten:
                                 self.relevante_spalten.append(1)
 
@@ -3323,7 +3384,8 @@ class _UiSearchItem(QDialog):
                     dateString = str(erstfang['datum'].iloc[0])
                     dateFormatter = "%Y-%m-%d"
                     jahr_e = datetime.strptime(dateString, dateFormatter).year
-
+                    if jahr_e == 1974:
+                        print("WHAT THE HELL??")
                     if alter_e in [1, 2, 3, '1', '2', '3']:
                         matrix2use = matrix_alter_juv_bei_e
                         max_age = 7
@@ -3338,14 +3400,16 @@ class _UiSearchItem(QDialog):
                         dateString = str(art['datum'])
                         dateFormatter = "%Y-%m-%d"
                         year_diff = datetime.strptime(dateString, dateFormatter).year - jahr_e
-
+                        if year_diff not in matrix2use:
+                            continue
                         if art['alter'] not in matrix2use[year_diff] or year_diff > max_age:
                             found_error = True
-                            key = art['ESF_ID']
-                            if key not in matrix2mark.keys():
-                                matrix2mark[key] = []
+                            if art['ESF_ID'] in list(matrix2mark.keys()):
+                                pass
+                            else:
+                                matrix2mark[art['ESF_ID']] = []
                                 df_to_add_to_table = pd.concat([df_to_add_to_table, art.to_frame().T])
-                            matrix2mark[key].append(10)
+                            matrix2mark[art['ESF_ID']].append(10)
                             if 10 not in self.relevante_spalten:
                                 self.relevante_spalten.append(10)
                             # append(10): die zehnte Spalte in der Tabelle zeigt das Alter
@@ -3372,11 +3436,10 @@ class _UiSearchItem(QDialog):
                 if geschlecht.shape[0] > 2:
                     for index2, art in df_rnr.iterrows():
                         if art['geschlecht'] in [1, '1', 2, '2']:
-                            key = art['ESF_ID']
-                            if key not in matrix2mark.keys():
+                            if art['ESF_ID'] not in matrix2mark.keys():
                                 df_to_add_to_table = pd.concat([df_to_add_to_table, art.to_frame().T])
-                                matrix2mark[key] = []
-                            matrix2mark[key].append(11)
+                                matrix2mark[art['ESF_ID']] = []
+                            matrix2mark[art['ESF_ID']].append(11)
                             if 11 not in self.relevante_spalten:
                                 self.relevante_spalten.append(11)
 
@@ -3388,13 +3451,11 @@ class _UiSearchItem(QDialog):
 
                 if w_moult:
                     m1_compare = df_rnr['moult1'].iloc[0]
-                    m2_compare = df_rnr['moult2'].iloc[0]
                     dat_compare = df_rnr['datum'].iloc[0]
                     dateString = str(dat_compare)
                     dateFormatter = "%Y-%m-%d"
                     dat_compare = datetime.strptime(dateString, dateFormatter)
 
-                    id_compare = df_rnr['ESF_ID'].iloc[0]
                     df_compare = df_rnr.iloc[0]
 
                     for ind, val in df_rnr.iterrows():
@@ -3402,39 +3463,33 @@ class _UiSearchItem(QDialog):
                         dateFormatter = "%Y-%m-%d"
                         dat_current = datetime.strptime(dateString, dateFormatter)
                         if abs(dat_current - dat_compare).days <= 2:
-                            if m1_compare != val['moult1']:
-                                key = val['ESF_ID']
-                                if key not in matrix2mark.keys():
+                            if m1_compare.eq(val['moult1']):
+                                if val['ESF_ID'] not in matrix2mark.keys():
                                     df_to_add_to_table = pd.concat([df_to_add_to_table, val.to_frame().T])
-                                    matrix2mark[key] = []
-                                matrix2mark[key].append(12)
+                                    matrix2mark[val['ESF_ID']] = []
+                                matrix2mark[val['ESF_ID']].append(12)
                                 if 12 not in self.relevante_spalten:
                                     self.relevante_spalten.append(12)
-                                key = id_compare
-                                if key not in matrix2mark.keys():
+                                if df_rnr['ESF_ID'].iloc[0] not in list(matrix2mark.keys()):
                                     df_to_add_to_table = pd.concat([df_to_add_to_table, df_compare])
-                                    matrix2mark[key] = []
-                                matrix2mark[key].append(12)
-                            if m2_compare != val['moult2']:
-                                key = val['ESF_ID']
-                                if key not in matrix2mark.keys():
+                                    matrix2mark[df_rnr['ESF_ID'].iloc[0]] = []
+                                matrix2mark[df_rnr['ESF_ID'].iloc[0]].append(12)
+                            else:
+                                if val['ESF_ID'] not in matrix2mark.keys():
                                     df_to_add_to_table = pd.concat([df_to_add_to_table, val.to_frame().T])
-                                    matrix2mark[key] = []
-                                matrix2mark[key].append(13)
+                                    matrix2mark[val['ESF_ID']] = []
+                                matrix2mark[val['ESF_ID']].append(13)
                                 if 12 not in self.relevante_spalten:
                                     self.relevante_spalten.append(13)
-                                key = id_compare
-                                if key not in matrix2mark.keys():
+                                if df_rnr['ESF_ID'].iloc[0] not in matrix2mark.keys():
                                     df_to_add_to_table = pd.concat([df_to_add_to_table, df_compare])
-                                    matrix2mark[key] = []
-                                matrix2mark[key].append(13)
+                                    matrix2mark[df_rnr['ESF_ID'].iloc[0]] = []
+                                matrix2mark[df_rnr['ESF_ID'].iloc[0]].append(13)
                         m1_compare = val['moult1']
-                        m2_compare = val['moult2']
                         dat_compare = val['datum']
                         dateString = str(dat_compare)
                         dateFormatter = "%Y-%m-%d"
                         dat_compare = datetime.strptime(dateString, dateFormatter)
-                        id_compare = val['ESF_ID']
                         df_compare = val.to_frame().T
 
                         if val['alter'] in [0, 1, 2, 3, '0', '1', '2', '3']:
@@ -3450,7 +3505,10 @@ class _UiSearchItem(QDialog):
                     kerbe_anz = 0
                     for ind, eintrag in df_rnr.iterrows():
                         if eintrag['frei4']:
-                            eintrag['frei4'] = round(float(eintrag['frei4']), 1)
+                            try:
+                                eintrag['frei4'] = round(float(str(eintrag['frei4'])), 1)
+                            except ValueError:
+                                eintrag['frei4'] = 0.0
                         else:
                             continue
                         if eintrag['frei4'] > 0:
@@ -3465,14 +3523,13 @@ class _UiSearchItem(QDialog):
                     df_kerbe = df_kerbe.drop_duplicates('frei4', keep='first')
                     if df_kerbe.shape[0] > 1:
                         for ind, art in df_kerbe.iterrows():
-                            if float(art['frei4']) < 0.5:
+                            if float(str(art['frei4'])) < 0.5:
                                 continue
-                            if float(art['frei4']) < kerbe_mw - 0.5 or float(art['frei4']) > kerbe_mw + 0.5:
-                                key = art['ESF_ID']
-                                if key not in matrix2mark.keys():
+                            if float(str(art['frei4'])) < kerbe_mw - 0.5 or float(str(art['frei4'])) > kerbe_mw + 0.5:
+                                if art['ESF_ID'] not in matrix2mark.keys():
                                     df_to_add_to_table = pd.concat([df_to_add_to_table, art.to_frame().T])
-                                    matrix2mark[key] = []
-                                matrix2mark[key].append(18)
+                                    matrix2mark[art['ESF_ID']] = []
+                                matrix2mark[art['ESF_ID']].append(18)
                                 if 18 not in self.relevante_spalten:
                                     self.relevante_spalten.append(18)
 
@@ -3482,7 +3539,7 @@ class _UiSearchItem(QDialog):
                     tarsus_anz = 0
                     for ind, eintrag in df_rnr.iterrows():
                         if eintrag['tarsus']:
-                            eintrag['tarsus'] = round(float(eintrag['tarsus']), 1)
+                            eintrag['tarsus'] = round(float(eintrag['tarsus'].iloc[0]), 1)
                         else:
                             continue
                         if eintrag['tarsus'] > 0:
@@ -3497,14 +3554,13 @@ class _UiSearchItem(QDialog):
                     df_tarsus = df_tarsus.drop_duplicates('tarsus', keep='first')
                     if df_tarsus.shape[0] > 1:
                         for ind, art in df_tarsus.iterrows():
-                            if float(art['tarsus']) < 0.5:
+                            if float(art['tarsus'].iloc[0]) < 0.5:
                                 continue
-                            if float(art['tarsus']) < tarsus_mw - 0.5 or float(art['tarsus']) > tarsus_mw + 0.5:
-                                key = art['ESF_ID']
-                                if key not in matrix2mark.keys():
+                            if float(art['tarsus'].iloc[0]) < tarsus_mw - 0.5 or float(art['tarsus'].iloc[0]) > tarsus_mw + 0.5:
+                                if art['ESF_ID'] not in matrix2mark.keys():
                                     df_to_add_to_table = pd.concat([df_to_add_to_table, art.to_frame().T])
-                                    matrix2mark[key] = []
-                                matrix2mark[key].append(32)
+                                    matrix2mark[art['ESF_ID']] = []
+                                matrix2mark[art['ESF_ID']].append(32)
                                 if 32 not in self.relevante_spalten:
                                     self.relevante_spalten.append(32)
 
@@ -3521,12 +3577,15 @@ class _UiSearchItem(QDialog):
             print(df_to_add_to_table)
 
         write_df_to_qtable(df_to_add_to_table, self.ui.TBL_results, matrix2mark)
+        """if isinstance(self.ui.TBL_results, QTableView):
+            self.ui.TBL_results.setItemDelegate(CustomDelegate())
+            self.ui.TBL_results.itemDelegate().paint(None, QStyleOptionViewItem(), self.ui.TBL_results.model().index(0,10))"""
         self.ui.TBL_results.sortByColumn(2, Qt.AscendingOrder)
         self.ui.TBL_results.sortByColumn(0, Qt.AscendingOrder)
         if not self.ui.CHB_rel_col.isChecked():
             self.ui.CHB_rel_col.toggle()
         else:
-            for col_i in range(self.ui.TBL_results.columnCount()):
+            for col_i in range(self.ui.TBL_results.model().columnCount()):
                 if col_i not in self.relevante_spalten:
                     self.ui.TBL_results.hideColumn(col_i)
         self.show_all_columns = False
@@ -3624,6 +3683,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, user_internal, parent=None):
         super().__init__(parent)
 
+        self.ringtyp = -1
         self.sql_command_gui = None
         self.nfa = None
         self.tagebucheintrag_gui = None
@@ -4539,13 +4599,11 @@ class MainWindow(QtWidgets.QMainWindow):
                                                           + eintrag['vorname'] + "'", conn_local)
                 if len(eintrag_vorhanden) >= 1 and eintrag['only-year'] == 0:
                     # Beringer bereits vorhanden ==> überschreiben?
-                    msgb = QtWidgets.QMessageBox()
-                    msgb.setWindowTitle("Speichern ...")
-                    msgb.setText("Eintrag ist bereits vorhanden! Wirklich speichern/überschreiben?")
-                    msgb.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-                    msgb.setDefaultButton(QMessageBox.No)
-                    if msgb.exec_() != QMessageBox.Yes:
+                    answ = rberi_lib.QMessageBoxB('ny', "Eintrag ist bereits vorhanden! Wirklich speichern/überschreiben?",
+                                                  "Sicherheitsabfrage", qss=bd.get_qss()).exec()
+                    if answ != QMessageBox.Yes:
                         return
+
                     try:
                         if not eintrag['plz']:
                             plz_txt = "''"
@@ -5260,7 +5318,7 @@ class MainWindow(QtWidgets.QMainWindow):
             print_txt = print_txt + self.ui.CMB_fangart.currentText() + "; "
             sql_text += "'" + self.get_zentrale(self.ui.CMB_zentrale.currentText()) + "', "
             sql_text += "'" + df_art.iloc[0, 0] + "', "
-            print_txt = print_txt + df_art.iloc[0, 0] + "; "
+            print_txt = print_txt + str(df_art.iloc[0, 0]) + "; "
             sql_text += "'" + self.ui.dateEdit.date().toString(Qt.ISODate) + "', "
             sql_text += "" + str(self.ui.timeEdit.time().hour()) + ", "
             print_txt = (print_txt + self.ui.dateEdit.date().toString(Qt.ISODate) + " " + str(self.ui.timeEdit.time().hour()) +
@@ -5333,14 +5391,14 @@ class MainWindow(QtWidgets.QMainWindow):
             if fangart == 'e':
                 rings, ringn, ringn_int = self.get_ringnr_separated(self.ui.INP_ringnummer.text())
                 lastnum = -1
-                ringtyp = ringserienverwaltung.get_ringtypref(engine, self.ui.CMB_art.currentText())
+                ringtyp = self.get_ringtyp()
                 if ringtyp < 0:
                     rberi_lib.QMessageBoxB('ok', 'Der Ringtyp konnte nicht gefunden werden. Das darf eigentlich nicht sein. '
                                                  'Bitte einen Fehler absetzen (feedback) mit dem detaillierten Text.',
                                            'Interner Fehler',
                                            [f'ringserienverwaltung.get_ringtypref: Fehlercode = {ringtyp}'],
                                            qss=bd.get_qss()).exec_()
-                    return
+                    return False
                 try:
                     lastnum = ringserienverwaltung.get_last_given_nmb(engine, ringtyp, rings)
                 except Exception as _err:
@@ -5348,22 +5406,7 @@ class MainWindow(QtWidgets.QMainWindow):
                                            "Ringnummernfehler.", [str(_err),
                                                                   f'Ringtyp = {ringtyp}, Ringserie = {rings}, lastnum = '
                                                                   f'{lastnum}'], qss=bd.get_qss()).exec_()
-                    return
-
-                """try:
-                    engine.reset()
-                    lastnum = int(pd.read_sql_query("Select letztevergebenenummer FROM " + bd.get_tbl_name_ringserie() + " " +
-                                              "WHERE ringserie = '" + rings + "' AND status = 1",
-                                              engine).iat[0, 0])
-                    lastnum_df = pd.read_sql_query("Select letztevergebenenummer FROM " + bd.get_tbl_name_ringserie() + " " +
-                                              "WHERE ringserie = '" + rings + "' AND status = 1", engine)
-                    print(lastnum)
-                except Exception as excp:
-                    rberi_lib.QMessageBoxB('ok',
-                                           f'rings = {rings}, ringn = {ringn}, ringn_int = {ringn_int}, '
-                                           f'lastnum = {lastnum}\n\nBitte Entwickler kontaktieren!',
-                                           'Fehler!', f'Exception = {excp}', qss=bd.get_qss()).exec_()
-                    return False"""
+                    return False
 
                 if (ringn_int >= 0) and (lastnum == ringn_int - 1):
                     new_nmb, msg_text = ringserienverwaltung.increment_last_nr(engine, ringtypref=ringtyp, ringserie=rings)
@@ -5538,25 +5581,14 @@ class MainWindow(QtWidgets.QMainWindow):
     def set_save_allowed(self, flag=False):
         self.save_allowed = flag
 
-    def update_ringnumber(self) -> bool:
-        """
-        Zuerst wird geschaut, ob es einen Unterschied zwischen weiblichen und männlichen Vögeln gibt,
-        was den benötigten Ringtyp angeht. Dann wird der entsprechende nächste Ring über das Modul ringserienverwaltung
-        geholt. Weiter wird der Abstand zur Schnur/Paketende ermittelt und ggf eine entsprechende Warnung ausgegeben.
-        Wurde die nächste zu vergebende Ringnummer korrekt ermittelt, wird diese in das Eingabefeld für die Ringnummer
-        eingetragen sowie die interne Variable self.ringnumber_generated damit befüllt.
-        :return:
-        True : wenn alles nach Plan läuft\n
-        False : bei Fehler
-        """
+    def return_ringtyp_ref(self, sex=False):
         if self.ui.CMB_art.currentIndex() < 0:
-            return False
+            return -1
         art_d = self.ui.CMB_art.currentText()
         with engine.connect() as conn_local:
             ringtyp_df = pd.read_sql_query(sa.text("SELECT ringtypMaleRef, ringtypFemaleRef from arten where deutsch = '" +
                                                    art_d + "'"), conn_local)
         ringtyp_m = int(ringtyp_df['ringtypMaleRef'].iloc[0])
-        # ringtyp_f = 'None'
         try:
             if not isinstance(ringtyp_df['ringtypFemaleRef'].iloc[0], type(None)):
                 ringtyp_f = int(ringtyp_df['ringtypFemaleRef'].iloc[0])
@@ -5565,7 +5597,7 @@ class MainWindow(QtWidgets.QMainWindow):
         except TypeError as _err:
             rberi_lib.QMessageBoxB('ok', 'Es konnte keine Ringserie für einen weiblichen Vogel gefunden werden.',
                                    'Ringnummernfehler', str(_err), qss=bd.get_qss()).exec_()
-            return False
+            return -1
 
         if ringtyp_f != 'None':
             answer = rberi_lib.QMessageBoxB('cyn',
@@ -5581,16 +5613,36 @@ class MainWindow(QtWidgets.QMainWindow):
                                                                          'Geschlecht bevor es weitergeht...',
                                             qss=bd.get_qss()).exec_()
             if answer == QMessageBox.Yes:
-                next_nmb, diff_to_end, ringserie = ringserienverwaltung.get_next_nr(engine, ringtyp_f)
-                ringtyp = ringtyp_f
+                self.set_ringtyp(ringtyp_f)
+                return ringtyp_f
             elif answer == QMessageBox.No:
-                next_nmb, diff_to_end, ringserie = ringserienverwaltung.get_next_nr(engine, ringtyp_m)
-                ringtyp = ringtyp_m
+                self.set_ringtyp(ringtyp_m)
+                return ringtyp_m
             else:
-                return False
+                return -1
         else:
-            next_nmb, diff_to_end, ringserie = ringserienverwaltung.get_next_nr(engine, ringtyp_m)
-            ringtyp = ringtyp_m
+            self.set_ringtyp(ringtyp_m)
+            return ringtyp_m
+
+    def set_ringtyp(self, typ: int):
+        self.ringtyp = typ
+
+    def get_ringtyp(self) -> int:
+        return self.ringtyp
+
+    def update_ringnumber(self) -> bool:
+        """
+        Zuerst wird geschaut, ob es einen Unterschied zwischen weiblichen und männlichen Vögeln gibt,
+        was den benötigten Ringtyp angeht. Dann wird der entsprechende nächste Ring über das Modul ringserienverwaltung
+        geholt. Weiter wird der Abstand zur Schnur/Paketende ermittelt und ggf eine entsprechende Warnung ausgegeben.
+        Wurde die nächste zu vergebende Ringnummer korrekt ermittelt, wird diese in das Eingabefeld für die Ringnummer
+        eingetragen sowie die interne Variable self.ringnumber_generated damit befüllt.
+        :return:
+        True : wenn alles nach Plan läuft\n
+        False : bei Fehler
+        """
+        ringtyp = self.return_ringtyp_ref()
+        next_nmb, diff_to_end, ringserie = ringserienverwaltung.get_next_nr(engine, ringtyp)
 
         if next_nmb < 0 or diff_to_end < 0:
             rberi_lib.QMessageBoxB('ok', 'Es trat ein Fehler auf. Bitte Stationsleitung informieren. Siehe Details.',
@@ -5731,6 +5783,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.scene.clear()
 
     def fangart_changed(self):
+        if not self.ui.CMB_fangart.isEnabled():
+            return
         fangart = self.ui.CMB_fangart.currentText()
         self.ui.INP_ringnummer.setEnabled(True)
         if fangart == 'e':
@@ -5948,7 +6002,7 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             return "Fehler"
 
-    def set_zentrale(self) -> bool:
+    def set_zentrale(self) -> bool | None:
         """
             Setzt die Zentrale im Eingabefenster auf den Standardwert laut defaults/Einstellungen. \n
         :return:
@@ -6466,7 +6520,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.ui.TBL_wiederfaenge.setRowCount(0)
             self.connect_all()
 
-    def get_defaults(self) -> pd.DataFrame:
+    def get_defaults(self) -> pd.DataFrame | None:
         """
 
         :return:
@@ -6833,14 +6887,14 @@ class MainWindow(QtWidgets.QMainWindow):
         if not self.get_edit_status():
             print("programm_beenden aufgerufen") if bd.get_debug() else None
             logout(txt)
-            app.exit(0)
+            sys.exit()
         else:
             if rberi_lib.QMessageBoxB("ny", "Es wird gerade ein Datensatz bearbeitet. Sicher verlassen?",
                                       "Sicherheitsabfrage", None, qss=bd.get_qss()).exec_() != QMessageBox.Yes:
                 return
             else:
                 logout(txt)
-                app.exit(0)
+                sys.exit()
 
     def set_user(self, _user):
         self.current_user = _user
@@ -7555,17 +7609,18 @@ def write_df_to_qtable(df_to_integrate: pd.DataFrame, table: QTableWidget, *args
     if bd.get_debug():
         print(f'table_rowcount_old = {table.rowCount()}')
     if operation == 'new':
-        headers_old = list(df_to_integrate)
+        headers_old = df_to_integrate.columns.values.tolist()
         headers = []
-        for header in headers_old:
-            headers.append(header.capitalize)
-        # headers = list(map(str.capitalize, headers))
+        headers = list(map(str.capitalize, headers_old))
+        pprint(headers) if bd.get_debug() else None
         headers = ["Innenfuß" if x == "Frei2" else x for x in headers]
         headers = ["Kerbe" if x == "Frei4" else x for x in headers]
         table.clear()
         table.setSortingEnabled(False)
         table.setRowCount(df_to_integrate.shape[0])
         table.setColumnCount(df_to_integrate.shape[1])
+        pprint("Headers:") if bd.get_debug() else None
+        pprint(headers) if bd.get_debug() else None
         table.setHorizontalHeaderLabels(headers)
     elif operation == 'add':
         if df_to_integrate.shape[1] != table.columnCount():
@@ -7599,10 +7654,6 @@ def write_df_to_qtable(df_to_integrate: pd.DataFrame, table: QTableWidget, *args
 
             table.setItem(row + row_offset, col, item2add)
             if col_to_mark and col == col_to_mark:
-                # item2add.setData(Qt.BackgroundRole, QColor('yellow'))
-                # item2add.setData(Qt.ForegroundRole, QColor('red'))
-                # item2add.setBackground(QtGui.QColor(255, 215, 0))
-                # table.item(row + row_offset, col).setBackground(QColor('red'))
                 color = QColor(Qt.GlobalColor.yellow)
                 table.item(row + row_offset, col).setBackground(color)
                 font = QtGui.QFont()
@@ -7610,6 +7661,7 @@ def write_df_to_qtable(df_to_integrate: pd.DataFrame, table: QTableWidget, *args
                 font.setItalic(True)
                 font.setUnderline(True)
                 table.item(row + row_offset, col).setFont(font)
+
     if flag_progbar:
         m2m['progressbar'].setValue(m2m['progressbar'].maximum())
         # item2add.setBackground(QColor("yellow"))
@@ -7828,65 +7880,47 @@ if __name__ == '__main__':
               "befindet wie die 'main.py' die das Programm startet.")
         sys.exit(app.exec_())
 
-    try:
-        f = Fernet(bd.get_key())
-        token = f.decrypt(bd.get_p())
-        pw = token.decode()
-        host = bd.get_host()
-        user = bd.get_user()
-        port = str(bd.get_port())
-        database = bd.get_database()
+    f = Fernet(bd.get_key())
+    token = f.decrypt(bd.get_p())
+    pw = token.decode()
+    host = bd.get_host()
+    user = bd.get_user()
+    port = str(bd.get_port())
+    database = bd.get_database()
 
-        if pw != '':
-            engine = db_connection(host, user, pw, port, database)
-            with engine.connect() as conn:
-                df_benutzer = pd.read_sql_query("SELECT * FROM benutzer", conn)
+    if pw != '':
+        engine = db_connection(host, user, pw, port, database)
+        with engine.connect() as conn:
+            df_benutzer = pd.read_sql_query("SELECT * FROM benutzer", conn)
 
-            current_u = CurrentUser()
-            form = Loginpage(df_benutzer, current_u)
+        current_u = CurrentUser()
+        form = Loginpage(df_benutzer, current_u)
 
-            # app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5()) --> dafür muss wieder qdarkstyle importiert werden
+        # app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5()) --> dafür muss wieder qdarkstyle importiert werden
 
-            if not bd.get_mit_anmeldung():
-                form.auto_login('admin')
+        if not bd.get_mit_anmeldung():
+            form.auto_login('admin')
+            window = MainWindow(current_u)
+            window.showMaximized()
+            sys.exit(app.exec_())
+        else:
+            if form.exec_() == QtWidgets.QDialog.Accepted:
+                print(f"current_u = {current_u.getuser()}") if bd.get_debug() else None
                 window = MainWindow(current_u)
-
-                # window = ImageViewer()
                 window.showMaximized()
-                sys.exit(app.exec_())
-            else:
-                if form.exec_() == QtWidgets.QDialog.Accepted:
-                    print(f"current_u = {current_u.getuser()}") if bd.get_debug() else None
-                    window = MainWindow(current_u)
-                    window.showMaximized()
-                    if current_u.gettips():
-                        print("Tipps anzeigen!") if bd.get_debug() else None
-                        try:
-                            # df_tips = pd.read_sql_query("SELECT tip FROM tips", engine)
-                            with engine.connect() as local_conn:
-                                df_tips = pd.read_sql_query(sa.text("SELECT tip FROM tips"), local_conn)
-                            tipsDialog = TipsDialog(df_tips['tip'].tolist(), bd.get_qss())
-                            answ = tipsDialog.exec_()
-                            print(str(answ)) if bd.get_debug() else None
-                            if not answ:
-                                print("Es sollen keine Tips mehr angezeigt werden .... ") if bd.get_debug() else None
-                                try:
-                                    sql_t = "UPDATE benutzer SET tips = 'N' WHERE username = '" + current_u.getuser() + "'"
-                                    with engine.connect() as conn:
-                                        conn.execute(sa.text(sql_t))
-                                        conn.commit()
-                                except Exception as err:
-                                    rberi_lib.QMessageBoxB('ok', 'Fehler beim Update der Tipsanzeige.', 'Datenbankfehler',
-                                                           str(err),
-                                                           qss=bd.get_qss()).exec()
-                        except Exception as err:
-                            rberi_lib.QMessageBoxB('ok', 'Keine Tipps gefunden!', 'Datenbankfehler', str(err),
-                                                   qss=bd.get_qss()).exec()
-                    else:
-                        # immer Samstags wird die Einstellung zurück auf 'Y' Tipps anzeigen gestellt.
-                        if date.today().weekday() == 5:
+                if current_u.gettips():
+                    print("Tipps anzeigen!") if bd.get_debug() else None
+                    try:
+                        # df_tips = pd.read_sql_query("SELECT tip FROM tips", engine)
+                        with engine.connect() as local_conn:
+                            df_tips = pd.read_sql_query(sa.text("SELECT tip FROM tips"), local_conn)
+                        tipsDialog = TipsDialog(df_tips['tip'].tolist(), bd.get_qss())
+                        answ = tipsDialog.exec_()
+                        print(str(answ)) if bd.get_debug() else None
+                        if not answ:
+                            print("Es sollen keine Tips mehr angezeigt werden .... ") if bd.get_debug() else None
                             try:
-                                sql_t = "UPDATE benutzer SET tips = 'Y' WHERE username = '" + current_u.getuser() + "'"
+                                sql_t = "UPDATE benutzer SET tips = 'N' WHERE username = '" + current_u.getuser() + "'"
                                 with engine.connect() as conn:
                                     conn.execute(sa.text(sql_t))
                                     conn.commit()
@@ -7894,7 +7928,20 @@ if __name__ == '__main__':
                                 rberi_lib.QMessageBoxB('ok', 'Fehler beim Update der Tipsanzeige.', 'Datenbankfehler',
                                                        str(err),
                                                        qss=bd.get_qss()).exec()
-                    sys.exit(app.exec_())
-    except Exception as e:
-        print("Fehler: " + str(e)) if bd.get_debug() else None
-        logout(f"Schwerwiegender Fehler: {e}")
+                    except Exception as err:
+                        rberi_lib.QMessageBoxB('ok', 'Keine Tipps gefunden!', 'Datenbankfehler', str(err),
+                                               qss=bd.get_qss()).exec()
+                else:
+                    # immer Samstags wird die Einstellung zurück auf 'Y' Tipps anzeigen gestellt.
+                    if date.today().weekday() == 5:
+                        try:
+                            sql_t = "UPDATE benutzer SET tips = 'Y' WHERE username = '" + current_u.getuser() + "'"
+                            with engine.connect() as conn:
+                                conn.execute(sa.text(sql_t))
+                                conn.commit()
+                        except Exception as err:
+                            rberi_lib.QMessageBoxB('ok', 'Fehler beim Update der Tipsanzeige.', 'Datenbankfehler',
+                                                   str(err),
+                                                   qss=bd.get_qss()).exec()
+                print("Warten auf Systemshutdown ... ") if bd.get_debug() else None
+                sys.exit(app.exec_())
