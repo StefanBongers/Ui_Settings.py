@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import datetime
-import mariadb
+from sqlalchemy import Engine
+import sqlalchemy as sa
 import pandas as pd
 from PyQt5.QtCore import QDateTime
 
@@ -10,7 +11,7 @@ from Beringungsoberflaeche.tagebucheintrag import Ui_Dialog
 
 
 class Tagebucheintrag(QDialog):
-    def __init__(self, db_eng: mariadb.Connection, debug: bool = False, current_user: str = "reit", parent=None, **kwargs):
+    def __init__(self, db_eng: Engine, debug: bool = False, current_user: str = "reit", parent=None, **kwargs):
         super().__init__(parent)
         self.ui = Ui_Dialog()
         self.ui.setupUi(self)
@@ -24,8 +25,9 @@ class Tagebucheintrag(QDialog):
         self.ui.DTE_zeitstempel.setDateTime(QDateTime.currentDateTime())
 
         try:
-            self.df_ringer = pd.read_sql("SELECT nachname, vorname, ringer_new FROM ringer WHERE jahr = '" +
-                                         str(datetime.date.today().year) + "'", self.engine)
+            with self.engine.connect() as conn_local:
+                self.df_ringer = pd.read_sql_query(sa.text("SELECT nachname, vorname, ringer_new FROM ringer WHERE jahr = '" +
+                                                   str(datetime.date.today().year) + "'"), conn_local)
         except Exception as err:
             rberi_lib.QMessageBoxB('ok', 'Datenbankfehler.', "Datenbankfehler.", str(err)).exec_()
             return
@@ -49,11 +51,11 @@ class Tagebucheintrag(QDialog):
                     self.ui.LE_ringnummer.text() + "', '" + self.ui.PTE_fehlertext.toPlainText() + "')")
         if self.debug:
             print("SQL_TEXT : " + sql_text)
+
         try:
-            cursor = self.engine.cursor()
-            cursor.execute(sql_text)
-            self.engine.commit()
-            cursor.close()
+            with self.engine.connect() as conn_local:
+                conn_local.execute(sa.text(sql_text))
+                conn_local.commit()
             self.saved = True
             self.close()
         except Exception as err:

@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 import datetime
-import mariadb
 import pandas as pd
 from PyQt5.QtCore import QDate, Qt
+from sqlalchemy import Engine
+import sqlalchemy as sa
 
 import rberi_lib
 from PyQt5.QtWidgets import QDialog, QFileDialog, QButtonGroup, QTableWidgetItem
@@ -10,7 +11,7 @@ from Beringungsoberflaeche.netzfach_auswertung import Ui_Dialog
 
 
 class Netzfach_Auswertung(QDialog):
-    def __init__(self, db_eng: mariadb.Connection, debug: bool = False, current_user: str = "reit", parent=None, **kwargs):
+    def __init__(self, db_eng: Engine, debug: bool = False, current_user: str = "reit", parent=None, **kwargs):
         super().__init__(parent)
         self.ui = Ui_Dialog()
         self.ui.setupUi(self)
@@ -56,7 +57,8 @@ class Netzfach_Auswertung(QDialog):
 
         self.netze = pd.DataFrame()
         try:
-            self.netze = pd.read_sql("SELECT Netz, zuordnung FROM netze WHERE aktiv = 1", self.engine)
+            with self.engine.connect() as conn_local:
+                self.netze = pd.read_sql_query(sa.text("SELECT Netz, zuordnung FROM netze WHERE aktiv = 1"), conn_local)
         except Exception as err:
             rberi_lib.QMessageBoxB("yn", "Datenbankfehler. Siehe Details.", "Datenbankfehler", str(err)).exec_()
             return
@@ -74,7 +76,8 @@ class Netzfach_Auswertung(QDialog):
 
         df = pd.DataFrame()
         try:
-            df = pd.read_sql(sql_txt, self.engine)
+            with self.engine.connect() as conn_local:
+                df = pd.read_sql_query(sa.text(sql_txt), conn_local)
         except Exception as err:
             rberi_lib.QMessageBoxB('ok', 'Datenbank- oder SQL-Fehler. Siehe Details.', 'Fehler', str(err)).exec_()
             return
@@ -388,8 +391,8 @@ class Netzfach_Auswertung(QDialog):
             self.first_header = "Netz " + self.ui.CMB_netz.currentText()
             return ("SELECT ringnummer, fach, netz, datum, jahr FROM esf WHERE datum >= '" + self.ui.DTE_start.date().toString(
                 "yyyy-MM-dd") +
-                    "' AND datum <= '" + self.ui.DTE_ende.date().toString("yyyy-MM-dd") + "' AND netz = '" + self.ui.CMB_netz.currentText() +
-                    "'")
+                    "' AND datum <= '" + self.ui.DTE_ende.date().toString("yyyy-MM-dd") + "' AND netz = '" +
+                    self.ui.CMB_netz.currentText() + "'")
         elif self.ui.RBTN_alle.isChecked():
             self.first_header = "Alle Netze"
             return ("SELECT ringnummer, fach, netz, datum, jahr FROM esf WHERE datum >= '" + self.ui.DTE_start.date().toString(
@@ -400,52 +403,64 @@ class Netzfach_Auswertung(QDialog):
             if self.ui.RBTN_hi.isChecked():
                 self.first_header = "Netze hinten"
                 try:
-                    df_nets_to_select = pd.read_sql("SELECT Netz from netze WHERE left(zuordnung, 3) LIKE 'hi_'", self.engine)
+                    with self.engine.connect() as conn_local:
+                        df_nets_to_select = pd.read_sql_query(
+                            sa.text("SELECT Netz from netze WHERE left(zuordnung, 3) LIKE 'hi_'"), conn_local)
                 except Exception as err:
                     rberi_lib.QMessageBoxB("ok", "Datenbankfehler oder Abfragefehler. Siehe Details.",
                                            "Datenbankfehler", str(err)).exec_()
-                    return
+                    return ""
 
             elif self.ui.RBTN_vo.isChecked():
                 self.first_header = "Netze vorne"
                 try:
-                    df_nets_to_select = pd.read_sql("SELECT Netz from netze WHERE left(zuordnung, 3) LIKE 'vo_'", self.engine)
+                    with self.engine.connect() as conn_local:
+                        df_nets_to_select = pd.read_sql_query(
+                            sa.text("SELECT Netz from netze WHERE left(zuordnung, 3) LIKE 'vo_'"), conn_local)
                 except Exception as err:
                     rberi_lib.QMessageBoxB("ok", "Datenbankfehler oder Abfragefehler. Siehe Details.",
                                            "Datenbankfehler", str(err)).exec_()
-                    return
+                    return ""
             elif self.ui.RBTN_hi_li.isChecked():
                 self.first_header = "Netze hinten links"
                 try:
-                    df_nets_to_select = pd.read_sql("SELECT Netz from netze WHERE left(zuordnung, 5) LIKE 'hi_li'", self.engine)
+                    with self.engine.connect() as conn_local:
+                        df_nets_to_select = pd.read_sql_query(sa.text("SELECT Netz from netze WHERE left(zuordnung, 5) LIKE "
+                                                                      "'hi_li'"), conn_local)
                 except Exception as err:
                     rberi_lib.QMessageBoxB("ok", "Datenbankfehler oder Abfragefehler. Siehe Details.",
                                            "Datenbankfehler", str(err)).exec_()
-                    return
+                    return ""
             elif self.ui.RBTN_hi_re.isChecked():
                 self.first_header = "Netze hinten rechts"
                 try:
-                    df_nets_to_select = pd.read_sql("SELECT Netz from netze WHERE left(zuordnung, 5) LIKE 'hi_re'", self.engine)
+                    with self.engine.connect() as conn_local:
+                        df_nets_to_select = pd.read_sql_query(sa.text("SELECT Netz from netze WHERE left(zuordnung, 5) LIKE "
+                                                                      "'hi_re'"), conn_local)
                 except Exception as err:
                     rberi_lib.QMessageBoxB("ok", "Datenbankfehler oder Abfragefehler. Siehe Details.",
                                            "Datenbankfehler", str(err)).exec_()
-                    return
+                    return ""
             elif self.ui.RBTN_vo_li.isChecked():
                 self.first_header = "Netze vorne links"
                 try:
-                    df_nets_to_select = pd.read_sql("SELECT Netz from netze WHERE left(zuordnung, 5) LIKE 'vo_li'", self.engine)
+                    with self.engine.connect() as conn_local:
+                        df_nets_to_select = pd.read_sql_query(sa.text("SELECT Netz from netze WHERE left(zuordnung, 5) LIKE "
+                                                                      "'vo_li'"), conn_local)
                 except Exception as err:
                     rberi_lib.QMessageBoxB("ok", "Datenbankfehler oder Abfragefehler. Siehe Details.",
                                            "Datenbankfehler", str(err)).exec_()
-                    return
+                    return ""
             elif self.ui.RBTN_vo_re.isChecked():
                 self.first_header = "Netze vorne rechts"
                 try:
-                    df_nets_to_select = pd.read_sql("SELECT Netz from netze WHERE left(zuordnung, 5) LIKE 'vo_re'", self.engine)
+                    with self.engine.connect() as conn_local:
+                        df_nets_to_select = pd.read_sql_query(sa.text("SELECT Netz from netze WHERE left(zuordnung, 5) LIKE "
+                                                                      "'vo_re'"), conn_local)
                 except Exception as err:
                     rberi_lib.QMessageBoxB("ok", "Datenbankfehler oder Abfragefehler. Siehe Details.",
                                            "Datenbankfehler", str(err)).exec_()
-                    return
+                    return ""
 
             txt_netze = "("
             for row_index, row_content in df_nets_to_select.iterrows():

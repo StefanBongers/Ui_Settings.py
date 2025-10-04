@@ -358,8 +358,8 @@ class Backup_GUI(QDialog):
 
         try:
             with engine.connect() as _conn:
-                heute_datum = datetime.today().date() - timedelta(days=365)
-                # heute_datum = datetime.today().date()
+                # heute_datum = datetime.today().date() - timedelta(days=365)
+                heute_datum = datetime.today().date()
                 datum_neu = heute_datum - timedelta(days=7)
                 if datum_neu.month == 6 and datum_neu.day < 30:
                     datum_neu = date(heute_datum.year, 6, 30)
@@ -405,9 +405,10 @@ class Backup_GUI(QDialog):
             'Art': ['Summe'],
         }
         for spaltenname, inhalt in df_to_html.items():
-            print(f"Spaltenname: {spaltenname}")
-            print(f"Daten der Spalte:\n{inhalt}\n")
-            print(f"Summe vielleicht auch: {inhalt.sum()}")
+            if bd.get_debug():
+                print(f"Spaltenname: {spaltenname}")
+                print(f"Daten der Spalte:\n{inhalt}\n")
+                print(f"Summe vielleicht auch: {inhalt.sum()}")
             if spaltenname == "Art":
                 continue
             data[str(spaltenname)] = inhalt.sum()
@@ -4824,7 +4825,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.wfr.exec_()
 
     def netzfachauswertung(self):
-        self.nfa = Netzfach_Auswertung(engine.connect())
+        self.nfa = Netzfach_Auswertung(engine)
         self.__set_widget_stylesheet(self.nfa)
         self.nfa.exec_()
 
@@ -4838,7 +4839,7 @@ class MainWindow(QtWidgets.QMainWindow):
             items.append(self.ui.LST_letzte_beringer.item(index).text())
         kwarg = {'ringer': items}
 
-        self.tagebucheintrag_gui = Tagebucheintrag(engine.connect(), bd.get_debug(), self.get_current_user(), **kwarg)
+        self.tagebucheintrag_gui = Tagebucheintrag(engine, bd.get_debug(), self.get_current_user(), **kwarg)
         self.__set_widget_stylesheet(self.tagebucheintrag_gui)
         self.tagebucheintrag_gui.exec_()
 
