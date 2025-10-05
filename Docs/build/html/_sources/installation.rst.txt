@@ -1,9 +1,6 @@
 Installation
 ============
 
-Erste Schritte
---------------
-
 Um Geier zu installieren, bedarf es der Installation von python, vielen python Bibliotheken via pip und einem lokalen
 mariaDB-Server.
 

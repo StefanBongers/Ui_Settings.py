@@ -19,6 +19,8 @@ documentation for details.
     installation
     subpages/first_steps
     subpages/eingabe
+    subpages/beringerverwaltung
+    subpages/benutzereinstellungen
 
 
 

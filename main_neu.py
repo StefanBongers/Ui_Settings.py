@@ -6355,7 +6355,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.CMB_fangart.setCurrentIndex(0)
         self.ui.CMB_netz.setCurrentIndex(-1)
         self.ui.CMB_fach.setCurrentIndex(-1)
-        self.ui.CMB_beringer.setCurrentText("")
+        # self.ui.CMB_beringer.setCurrentText("")
         self.ui.CMB_fett.setCurrentIndex(-1)
         self.ui.CMB_muskel.setCurrentIndex(-1)
         self.ui.CMB_alter.setCurrentIndex(-1)
