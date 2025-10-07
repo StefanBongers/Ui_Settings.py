@@ -17,6 +17,7 @@ Ist der:die Beringer:in freigeschaltet, taucht er/sie im Dropdown auswählbar au
 
 .. image:: ../pictures/geier_beringerverwa_neu.png
 
-Über den Button ``Neuen Beringer anlegen ...`` wird ein neuer Eintrag erzeugt. Die Eingaben werden direkt in der Tabelle
-vorgenommen. Nachname und Vorname sind dabei obligatorisch. Alle weiteren Informationen optional.
+Über den Button ``Neuen Beringer anlegen ...`` wird ein neuer Eintrag erzeugt (1). Die Eingaben werden direkt in der Tabelle
+vorgenommen (2). Nachname und Vorname sind dabei obligatorisch. Alle weiteren Eingaben sind optional. Empfehlenswert ist die
+Angabe einer Email-Adresse, damit man z.B. den Jahresbericht empfangen kann.
 

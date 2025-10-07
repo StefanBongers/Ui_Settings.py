@@ -9,6 +9,7 @@
   <title>Die Eingabemaske &mdash; ReadTheDocs_Geier  Dokumentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/hacks.css?v=6658a5ce" />
 
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
@@ -20,6 +21,7 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Stichwortverzeichnis" href="../genindex.html" />
     <link rel="search" title="Suche" href="../search.html" />
+    <link rel="next" title="Beringerverwaltung" href="beringerverwaltung.html" />
     <link rel="prev" title="Erste Schritte" href="first_steps.html" /> 
 </head>
 
@@ -48,6 +50,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="first_steps.html">Erste Schritte</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Die Eingabemaske</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#nutzliche-hinweise">Nützliche Hinweise</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#art-und-schnellauswahl">Art und Schnellauswahl</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#fangart">Fangart</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ringnummer">Ringnummer</a></li>
@@ -64,6 +67,8 @@
 <li class="toctree-l2"><a class="reference internal" href="#buttonleiste">Buttonleiste</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="beringerverwaltung.html">Beringerverwaltung</a></li>
+<li class="toctree-l1"><a class="reference internal" href="benutzereinstellungen.html">Benutzereinstellungen</a></li>
 </ul>
 
         </div>
@@ -93,11 +98,31 @@
   <section id="die-eingabemaske">
 <h1>Die Eingabemaske<a class="headerlink" href="#die-eingabemaske" title="Link to this heading"></a></h1>
 <p>Die Eingabemaske ist das Herzstück von Geier. Hier werden die einzelnen Datensätze der Vögel eingegeben und gespeichert.</p>
-<img alt="../_images/geier_eingabemaske.png" src="../_images/geier_eingabemaske.png" />
-<p>Beim Aufruf über das Menü wartet Geier auf die Eingabe einer Art. Der <em>deutsche Artname</em> wird erwartet. Die Art kann auch über
-das Dropdown ausgewählt werden.</p>
+<section id="nutzliche-hinweise">
+<h2>Nützliche Hinweise<a class="headerlink" href="#nutzliche-hinweise" title="Link to this heading"></a></h2>
+<ul>
+<li><p>Mit den Pfeiltasten kann man zwischen den Feldern hin- und herspringen. Die Nutzung der TAB-Taste (vorwärts) und Shift+TAB (rückwärts) ist ebenfalls zu empfehlen.</p></li>
+<li><p>Es gibt einige Shortcuts:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Strg+B ==&gt; Schnellauswahl für die Beringerauswahl</p></li>
+<li><p>Strg+S ==&gt; Speichern</p></li>
+<li><p>Strg+F ==&gt; Schaltet Brutfleck ein/aus</p></li>
+<li><p>Strg+N ==&gt; Neue Eingabe</p></li>
+<li><p>Esc    ==&gt; Beendet Bearbeitung</p></li>
+<li><p>Strg+W ==&gt; Schließt Eingabemaske</p></li>
+<li><p>Strg+Q ==&gt; Beendet das Programm</p></li>
+<li><p>Alt +E ==&gt; öffnet Eingabemaske</p></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p>Die Zeichen / * - und + auf dem Nummernfeld (rechte Tastaturseite) sind analog für U M N und J. So kann ab Fett alles über das Numemrnfeld eingegeben werden (probiert es aus!)</p></li>
+</ul>
+<p>Beim Aufruf über das Menü wartet Geier auf die Eingabe einer Art. Der <em>deutsche Artname</em> wird erwartet. Die Art kann auch über das Dropdown ausgewählt werden.</p>
+</section>
 <section id="art-und-schnellauswahl">
 <h2>Art und Schnellauswahl<a class="headerlink" href="#art-und-schnellauswahl" title="Link to this heading"></a></h2>
+<img alt="../_images/geier_eingabemaske.png" src="../_images/geier_eingabemaske.png" />
 <p>Folgende Arten sind als <em>Schnellauswahl</em> hinterlegt. Das bedeutet, dass bei der Eingabe der ersten beiden Buchstaben die Art
 automatisch ausgefüllt wird und der Cursor in das nächste Feld Fangart springt:</p>
 <ul class="simple">
@@ -126,11 +151,7 @@ Benutzereinstellungen</span></a> lässt sich die Schnellauswahl für den Benutze
 <li><p><strong>w</strong> für Wiederfang (das ist immer auszuwählen, wenn der Vogel bereits einen Ring hat)</p></li>
 <li><p><strong>d</strong> für Defekt (wenn ein Ring beim Beringen kaputt gegangen ist und nicht mehr verwendet werden kann)</p></li>
 <li><p><strong>k</strong> für Kontrollfang (vorrangig <strong>nicht</strong> verwenden, da das Programm diese Einstellung selbstständig vornimmt)</p></li>
-<li><dl class="simple">
-<dt><strong>f</strong> für Fremdfang (wenn sicher ist, dass es sich um einen Wiederfang handelt, der nicht an der eigenen Station und Zentrale</dt><dd><p>beringt wurde - auch dies schlägt das Programm selbstständig vor, falls der Ring nicht in der Datenbank enthalten ist)</p>
-</dd>
-</dl>
-</li>
+<li><p><strong>f</strong> für Fremdfang (wenn sicher ist, dass es sich um einen Wiederfang handelt, der nicht an der eigenen Station und Zentrale beringt wurde - auch dies schlägt das Programm selbstständig vor, falls der Ring nicht in der Datenbank enthalten ist)</p></li>
 </ul>
 </section>
 <section id="ringnummer">
@@ -221,6 +242,7 @@ Eingabemaske geschlossen wird.</p>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="first_steps.html" class="btn btn-neutral float-left" title="Erste Schritte" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Zurück</a>
+        <a href="beringerverwaltung.html" class="btn btn-neutral float-right" title="Beringerverwaltung" accesskey="n" rel="next">Weiter <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
