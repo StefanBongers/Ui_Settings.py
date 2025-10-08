@@ -147,10 +147,35 @@ Buttonleiste
 ~~~~~~~~~~~~
 
 .. image:: ../pictures/geier_ausw_buttons.png
-x
+
 * Export: es wird eine *.csv der Ergebnistabelle exportiert
 * Grafik: Es wird eine Grafik laut den Diagrammeinstellungen angezeigt
 * Schließen: Beenden
+
+Beispiele
+~~~~~~~~~
+
+.. image:: ../pictures/geier_ausw_bsp1_01.png
+
+Im Beispiel werden alle MRI Arten für die Saison 2024 (30.06.24 bis 07.11.24) differenziert nach den Wochen. Angezeigt werden
+nur Erstfänge, bzw. Summe der Erst- und Kontrollfänge. Dabei werden leere Spalten (die es nicht geben würde) gelöscht.
+Angewählt ist als Diagrammtyp "Linie". Würde man nun den Button ``Grafik`` betätigen, würde das Programm länger nicht reagieren
+und dann eine sehr unübersichtliche Grafik darstellen. Dies liegt daran, dass für jede Zeile ein eigener Graph dargestellt wird
+. Dazu würden ca. 16 Punkte über die x-Achse abgetragen werden und die Legende wäre nicht lesbar:
+
+.. image:: ../pictures/geier_ausw_bsp1_02.png
+
+Sinnhaft wird das Diagramm, wenn man nur noch Summen anzeigt. Das erreicht man dadurch, dass man nun Summen anwählt:
+
+.. image:: ../pictures/geier_ausw_bsp1_03.png
+
+Nach erneutem Betätigen von Grafik erscheint dann eine sinnvoll(ere) Grafik. Zu beachten: Um schöne und verteilbare Grafiken zu
+erstellen, ist es immer die richtige Wahl, die gewünschten Daten zu exportieren und dann über Excel oder vergleichbare
+Tabellenkalkulationsprogramme schön formatierte Grafiken zu erstellen. Geier würde sich nie mit Excel & Co. vergleichen wollen :)
+
+.. image:: ../pictures/geier_ausw_bsp1_04.png
+
+
 
 
 
