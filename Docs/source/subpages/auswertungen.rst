@@ -152,8 +152,8 @@ Buttonleiste
 * Grafik: Es wird eine Grafik laut den Diagrammeinstellungen angezeigt
 * Schließen: Beenden
 
-Beispiele
-~~~~~~~~~
+Beispiel 1
+~~~~~~~~~~
 
 .. image:: ../pictures/geier_ausw_bsp1_01.png
 
@@ -175,7 +175,15 @@ Tabellenkalkulationsprogramme schön formatierte Grafiken zu erstellen. Geier w�
 
 .. image:: ../pictures/geier_ausw_bsp1_04.png
 
+Beispiel 2
+~~~~~~~~~~
 
+.. image:: ../pictures/geier_ausw_bsp2_01.png
+
+Im zweiten Beispiel werden die drei Grasmückenarten betrachtet. Zeitraum ist diesmal über 24 Jahre gewählt. Differenziert
+werden soll nach Jahr. Dargestellt sind wieder die Erstfänge, diesmal als Balkendiagramm.
+
+.. image:: ../pictures/geier_ausw_bsp2_02.png
 
 
 
