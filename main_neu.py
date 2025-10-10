@@ -3,6 +3,7 @@ import math
 import os
 import subprocess
 import time
+import webbrowser
 from ctypes import c_ushort, c_ulong
 from pprint import pprint
 from typing import Literal
@@ -3821,6 +3822,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.actionGrosse_Schrift.triggered.connect(self.grosse_schrift)
         self.ui.actionKleine_Schrift.triggered.connect(self.kleine_schrift)
         self.ui.actionTages_Back_Up.triggered.connect(self.backup)
+        self.ui.actionHilfe.triggered.connect(self.hilfe)
 
         # shortcuts
         # mit dem Shortcut Ctrl+Q kann man das Programm beenden (es wird die entsrepcehnde Funtion die mit dem
@@ -3841,6 +3843,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.shortcut2 = QShortcut(QtGui.QKeySequence("Ctrl+T"), self)
         self.shortcut2.activated.connect(self.testdatensatz)
+
+        self.shortcut3 = QShortcut(QtGui.QKeySequence("F1"), self)
+        self.shortcut3.activated.connect(self.hilfe)
 
         self.shortcut3 = QShortcut(QtGui.QKeySequence("Ctrl+Alt+L"), self)
         self.shortcut3.activated.connect(lambda: rberi_lib.QMessageBoxB("ok", 'Hallo Lena! Willkommen auf der Reit! Habe Spaß '
@@ -4413,6 +4418,12 @@ class MainWindow(QtWidgets.QMainWindow):
     ##############################################################################################################################
     # ALLE FUNKTIONEN DIE EIN NEUES FENSTER ÖFFNEN
     ##############################################################################################################################
+
+    def hilfe(self):
+        if self:
+            pass
+        url = "https://ui-settingspy.readthedocs.io/de/latest/subpages/auswertungen.html"
+        webbrowser.open(url)
 
     def search(self):
         self.ui_search = _UiSearch()

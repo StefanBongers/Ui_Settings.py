@@ -2688,6 +2688,8 @@
     <addaction name="separator"/>
     <addaction name="actionTagebucheintrag"/>
     <addaction name="separator"/>
+    <addaction name="actionHilfe"/>
+    <addaction name="separator"/>
     <addaction name="actionAktueller_Status"/>
    </widget>
    <widget class="QMenu" name="menuAnzeige">
@@ -2836,6 +2838,9 @@
     <font>
      <pointsize>14</pointsize>
     </font>
+   </property>
+   <property name="shortcut">
+    <string>F1</string>
    </property>
   </action>
   <action name="actionTeich_Sumpf">
@@ -2994,6 +2999,14 @@
   <action name="actionTagebucheintrag">
    <property name="text">
     <string>Tagebucheintrag</string>
+   </property>
+  </action>
+  <action name="actionHilfe">
+   <property name="text">
+    <string>Hilfe</string>
+   </property>
+   <property name="shortcut">
+    <string comment="F1"/>
    </property>
   </action>
  </widget>

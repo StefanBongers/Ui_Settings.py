@@ -3,6 +3,10 @@
 Release-Notes
 =============
 
+Version 2.01 - 2025-10-10
+-------------------------
+- Online-Hilfe eingebunden (Menü > Hilfe > Hilfe)
+
 Version 2.0 - 2025-10-05
 ------------------------
 - Umstellung auf sqlalchemy
