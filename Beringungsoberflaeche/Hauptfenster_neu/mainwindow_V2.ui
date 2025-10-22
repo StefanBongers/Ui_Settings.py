@@ -2717,6 +2717,8 @@
     <addaction name="actionNetzfach_Auswertung"/>
     <addaction name="separator"/>
     <addaction name="actionSQL_Befehl"/>
+    <addaction name="separator"/>
+    <addaction name="actionHeuteImLaufDerJahre"/>
    </widget>
    <addaction name="menuDatei"/>
    <addaction name="menuEingabe"/>
@@ -3007,6 +3009,16 @@
    </property>
    <property name="shortcut">
     <string comment="F1"/>
+   </property>
+  </action>
+  <action name="actionHeuteImLaufDerJahre">
+   <property name="text">
+    <string>Heute im Lauf der Jahre</string>
+   </property>
+   <property name="font">
+    <font>
+     <pointsize>12</pointsize>
+    </font>
    </property>
   </action>
  </widget>

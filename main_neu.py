@@ -6,16 +6,17 @@ import time
 import webbrowser
 from ctypes import c_ushort, c_ulong
 from pprint import pprint
-from typing import Literal
+from typing import Literal, cast, Optional
 
 import cv2
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import paramiko
+import pythoncom
 import wmi
 from PIL import Image
-from PyQt5.QtGui import QPixmap, QImage, QPainter, QColor, QFontMetrics
+from PyQt5.QtGui import QPixmap, QImage, QPainter, QColor, QFontMetrics, QKeyEvent
 from _ctypes import Structure
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -41,7 +42,7 @@ from PyQt5.QtWidgets import (QPushButton, QLabel, QLineEdit, QGridLayout, QCombo
                              QTableWidgetItem, QTreeWidgetItem, QTreeWidgetItemIterator, QFileDialog, QWidget,
                              QVBoxLayout, QShortcut, QGraphicsPixmapItem, QGraphicsScene, QGraphicsView,
                              QMainWindow, QCheckBox, QRadioButton, QTableWidget, QHBoxLayout, QListWidget,
-                             QListWidgetItem, QPlainTextEdit, QProgressBar, QDateEdit, QTimeEdit, QTableView)
+                             QListWidgetItem, QPlainTextEdit, QProgressBar, QDateEdit, QTimeEdit)
 from PyQt5 import QtWidgets, QtGui, QtCore, sip
 from PyQt5.QtCore import QDate, QTime, Qt, QEvent, QObject, QRegularExpression, QEventLoop, QTimer, QSortFilterProxyModel
 from cryptography.fernet import Fernet
@@ -147,76 +148,51 @@ class MyPandasModel(QtCore.QAbstractTableModel):
         return None
 
 
-class Backup_GUI(QDialog):
-    def __init__(self):
-        super().__init__(parent=None)
+class BackupThread(QtCore.QThread):
+    message = QtCore.pyqtSignal(str)
+    final_signal = QtCore.pyqtSignal(int)
 
-        self.backup_command = []
-        self.laufwerk = ""
-        self.fullback_needed = False
-        self.usb_found = False
-
-        self.setWindowTitle("Tägliches Backup")
-        self.resize(1000, 700)
-        self.layout = QVBoxLayout()
-
-        self.button_backup = QPushButton('Backup!')
-        self.button_backup.setVisible(False)
-        self.button_backup.clicked.connect(self.backup_clicked)
-        self.info = QListWidget()
-        self.info.addItem(QListWidgetItem("Bitte USB - Stick einstecken ... "))
-        self.info.addItem(QListWidgetItem("Suche nach NEUEM Speichermedium ... "))
-        self.info.setAutoScroll(True)
-
-        self.spacerItem = QtWidgets.QSpacerItem(10, 30, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
-
-        self.layout.addWidget(self.info)
-        self.layout.addItem(self.spacerItem)
-        self.layout.addWidget(self.button_backup)
-
-        self.setLayout(self.layout)
-        self.monitor = None
-
-        # umgezogen in getting_started()
-        # self.generate_html()
-        # self.check_usb_drive()
+    def run(self):
+        self.getting_started()
 
     def getting_started(self):
-        self.check_usb_drive()
+        # self.build_backup_command()
+        self.message.emit("Upload der Tagesliste wird vorbereitet ... ")
         try:
             self.generate_html()
+            self.message.emit("Upload der Tagesliste hat geklappt ...")
         except Exception as fehler:
-            rberi_lib.QMessageBoxB('ok', 'Upload der Tagesfänge hat nicht geklappt. Sollte diese Meldung wiederholt '
-                                         'aufgetreten sein, bitte einen Fehler absetzen. Danke!', 'Uploadfehler', str(fehler),
-                                   qss=bd.get_qss()).exec()
-
-    # def usb_added(self, device_id: str, device_info: dict[str, dict[str, str | tuple[str, ...]]]):
-    def usb_added(self):
-        self.laufwerk = ""
-        if self.usb_found:
+            self.message.emit("Upload der Tagesliste hat NICHT geklappt: " + str(fehler))
             return
+        self.message.emit("====================================")
+        self.message.emit("Suche nach NEUEM Speichermedium ... ")
+        self.message.emit("Bitte USB - Stick einstecken ... ")
+        if self.check_usb_drive():
+            self.build_backup_command()
+
+    def usb_added(self, device_id: str, device_info: dict[str, str]):
+        print(f"device_id = {device_id}, device_info dict[str,str] = {device_info}") if bd.get_debug() else None
         c = wmi.WMI()
         for disk in c.Win32_LogicalDisk(DriveType=2):
             if disk.VolumeName is not None:
-                if bd.get_usb_vol_name() in disk.VolumeName.lower():
+                if bd.get_usb_vol_name().lower() in disk.VolumeName.lower():
                     self.laufwerk = str(disk.Caption)
                     print("self.laufwerk = " + self.laufwerk) if bd.get_debug() else None
-            else:
-                continue
+                    self.build_backup_command()
 
-        self.build_backup_command()
-
-    def build_backup_command(self, buttonpressed=False):
+    def build_backup_command(self):
         if len(self.laufwerk) <= 0:
-            self.info.addItem(QListWidgetItem('Kein Speichermedium bzw. Laufwerk gefunden:  "' + self.laufwerk + '"'))
+            self.message.emit('Kein Speichermedium bzw. Laufwerk gefunden:  "' + self.laufwerk + '"')
+            self.final_signal.emit(0)
             return
 
-        self.info.addItem(QListWidgetItem('... Speichermedium GEFUNDEN! Laufwerk: ' + self.laufwerk))
+        self.message.emit('... Speichermedium GEFUNDEN! Laufwerk: ' + self.laufwerk)
         wochentage = {0: 'Montag', 1: 'Dienstag', 2: 'Mittwoch', 3: 'Donnerstag', 4: 'Freitag', 5: 'Samstag', 6: 'Sonntag'}
         heutiger_wochentag = wochentage[datetime.today().weekday()]
         if not os.path.exists(self.laufwerk + chr(92)):
             rberi_lib.QMessageBoxB("ok", "Laufwerk '" + self.laufwerk + chr(92) + "' nicht gefunden.", "Laufwerkfehler",
                                    qss=bd.get_qss()).exec_()
+            self.final_signal.emit(0)
             return
         for el in os.listdir(self.laufwerk):
             print("Gefundenes Verzeichnis: " + el) if bd.get_debug() else None
@@ -227,6 +203,7 @@ class Backup_GUI(QDialog):
                                          'als Verzeichnisse im Grundverzeichnis enthalten. Also ' + self.laufwerk +
                                    ':\\Montag\\, '
                                    + self.laufwerk + ':\\Dienstag\\ etc.', 'Falsches Speichermedium', qss=bd.get_qss()).exec_()
+            self.final_signal.emit(0)
             return
 
         mariabackup_path = bd.get_mariabackuppath()
@@ -259,11 +236,7 @@ class Backup_GUI(QDialog):
                                    last_inc_path, "--databases=" + bd.get_database(), "--user=" + bd.get_user(),
                                    "--password=" + bd.get_p_deco()]
 
-        if not buttonpressed:
-            self.info.addItem(QListWidgetItem('Bitte BackUp über den Button/Knopf unten starten ... '))
-            self.button_backup.setVisible(True)
-        else:
-            self.backup_clicked()
+        self.backup_clicked()
 
     # def usb_disconnect(self, device_id: str, device_info: dict[str, dict[str, str | tuple[str, ...]]]):
     def usb_disconnect(self):
@@ -273,10 +246,9 @@ class Backup_GUI(QDialog):
     def close(self):
         if self.monitor is not None:
             self.monitor.stop_monitoring()
-        super().close()
 
     def backup_clicked(self):
-        self.info.addItem(QListWidgetItem('Starte Backup-Prozedere ... '))
+        self.message.emit('Starte Backup-Prozedere ... ')
         loop = QEventLoop()
         QTimer.singleShot(1000, loop.quit)
         loop.exec_()
@@ -297,39 +269,38 @@ class Backup_GUI(QDialog):
                         if realtime_output == '' and result.poll() is not None:
                             break
                         if realtime_output:
-                            self.info.addItem(QListWidgetItem(realtime_output.strip()))
-                            self.info.scrollToBottom()
+                            self.message.emit(realtime_output.strip())
+                            # self.info.scrollToBottom()
                             loop = QEventLoop()
                             QTimer.singleShot(5, loop.quit)
                             loop.exec_()
             except Exception as excp:
                 rberi_lib.QMessageBoxB('ok', 'Datenbanksicherung fehlgeschlagen. Siehe Details.', 'Datenbankfehler',
                                        str(excp), qss=bd.get_qss()).exec_()
+                self.final_signal.emit(0)
                 return
         else:
             rberi_lib.QMessageBoxB('ok', 'Das Backup kann nicht erzeugt werden. Grund ist unbekannt. Der Befehl ist Null. '
                                          'Fehlercode 1314, bitte ein Feedback mit Fehlercode absetzen. Danke!',
                                    'BackupFehler', qss=bd.get_qss()).exec_()
 
-        self.info.addItem(QListWidgetItem('Erfolgreich beendet! Fenster schließt in 3 Sekunden ...'))
-        self.info.scrollToBottom()
+        self.message.emit('Erfolgreich beendet! Fenster schließt in 3 Sekunden ...')
         loop = QEventLoop()
         QTimer.singleShot(1000, loop.quit)
         loop.exec_()
-        self.info.addItem(QListWidgetItem('Fenster schließt in 2 Sekunden ...'))
-        self.info.scrollToBottom()
+        self.message.emit('Fenster schließt in 2 Sekunden ...')
         loop = QEventLoop()
         QTimer.singleShot(1000, loop.quit)
         loop.exec_()
-        self.info.addItem(QListWidgetItem('Fenster schließt in 1 Sekunde ...'))
-        self.info.scrollToBottom()
+        self.message.emit('Fenster schließt in 1 Sekunde ...')
         loop = QEventLoop()
         QTimer.singleShot(1000, loop.quit)
         loop.exec_()
-        self.close()
+        self.final_signal.emit(1)
 
     def check_usb_drive(self) -> bool | None:
-        c = wmi.WMI()
+        pythoncom.CoInitialize()
+        c = wmi.WMI(debug=True)
         print("USB-Gerät-Name erwartet (aus .ini) = " + bd.get_usb_vol_name()) if bd.get_debug() else None
         for disk in c.Win32_LogicalDisk(DriveType=2):
             if disk.VolumeName is None:
@@ -338,19 +309,18 @@ class Backup_GUI(QDialog):
             if disk.VolumeName is not None:
                 if bd.get_usb_vol_name().lower() in disk.VolumeName.lower():
                     self.laufwerk = disk.Caption + chr(92)
-                    _answ = rberi_lib.QMessageBoxB('ync', 'Speichermedium "' + disk.VolumeName + '" in "' + disk.Caption +
-                                                   '" gefunden. Backup starten?', "Info", qss=bd.get_qss()).exec_()
-                    if _answ == QMessageBox.Yes:
-                        self.build_backup_command(True)
-                        return True
+                    return True
         self.monitor = USBMonitor()
         self.monitor.start_monitoring(on_connect=self.usb_added, on_disconnect=self.usb_disconnect)
+        return False
 
     def generate_html(self):
         if self:
             pass
 
         def replace_spec(spec):
+            if not df_art['esf_kurz'].isin([spec]).any().any():
+                return spec
             spec_dt = str(df_art.query("esf_kurz == @spec")['deutsch'].iloc[0])
             if len(spec_dt) > 0:
                 return spec_dt
@@ -466,6 +436,36 @@ class Backup_GUI(QDialog):
             print(sftp.listdir("."))
             sftp.close()
             ssh_client.close()
+
+
+class Backup_GUI(QDialog):
+    def __init__(self):
+        super().__init__(parent=None)
+
+        self.setWindowTitle("Tägliches Backup")
+        self.resize(1000, 700)
+        self.layout = QVBoxLayout()
+
+        self.info = QListWidget()
+        self.info.setAutoScroll(True)
+
+        self.spacerItem = QtWidgets.QSpacerItem(10, 30, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
+
+        self.layout.addWidget(self.info)
+        self.layout.addItem(self.spacerItem)
+        self.setLayout(self.layout)
+
+    def add_message(self, text):
+        self.info.addItem(QListWidgetItem(text))
+        self.info.scrollToBottom()
+
+    def own_func(self, backup_code):
+        if backup_code == 1:
+            self.info.addItem(QListWidgetItem("Backup erfolgreich"))
+            self.accept()
+        else:
+            self.info.addItem(QListWidgetItem("Backup NICHT ausgeführt."))
+            self.reject()
 
 
 class BD:
@@ -3685,6 +3685,10 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, user_internal, parent=None):
         super().__init__(parent)
 
+        self.list_widget = None
+        self.layout_widget1 = None
+        self.widget1 = None
+        self.backup_worker = None
         self.ringtyp = -1
         self.sql_command_gui = None
         self.nfa = None
@@ -3823,6 +3827,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.actionKleine_Schrift.triggered.connect(self.kleine_schrift)
         self.ui.actionTages_Back_Up.triggered.connect(self.backup)
         self.ui.actionHilfe.triggered.connect(self.hilfe)
+        self.ui.actionHeuteImLaufDerJahre.triggered.connect(self.hildj)
 
         # shortcuts
         # mit dem Shortcut Ctrl+Q kann man das Programm beenden (es wird die entsrepcehnde Funtion die mit dem
@@ -4229,7 +4234,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     self.ui.INP_innenfuss.setEnabled(True)
 
         elif event.type() == QEvent.KeyPress:
-            event: QEvent.KeyPress
+            event = cast(QKeyEvent, event)
             if event.modifiers() & Qt.AltModifier:
                 if event.key() == QtCore.Qt.Key.Key_Down:
                     return super().eventFilter(source, event)
@@ -4424,6 +4429,79 @@ class MainWindow(QtWidgets.QMainWindow):
             pass
         url = "https://ui-settingspy.readthedocs.io/de/latest/subpages/auswertungen.html"
         webbrowser.open(url)
+
+    def hildj(self, grenze_anz: int = 4):
+        if not grenze_anz:
+            grenze_anzeige = 4
+        else:
+            grenze_anzeige = grenze_anz
+        with engine.connect() as conn_local:
+            df = pd.read_sql_query(sa.text("SELECT e.art, COUNT(*) AS artanz FROM esf e WHERE MONTH(e.datum) = MONTH(NOW()) "
+                                           "AND DAY(e.datum) = DAY(NOW()) AND fangart != 'd' GROUP BY art ORDER BY artanz DESC"),
+                                   conn_local)
+        for index, serie in df.iterrows():
+            df.loc[index, 'art'] = get_artname_from_esfkurz(str(df.loc[index, 'art']))
+        df_small = df.copy(deep=True)
+        print(f"grenze anzeige = {grenze_anzeige}")
+        for index, serie in df_small.iterrows():
+            if df_small.loc[index, 'artanz'] > grenze_anzeige:
+                df_small.drop(index, inplace=True)
+
+        self.widget1 = QWidget()
+        self.widget1.setWindowTitle("Heute im Laufe der Jahre ... ")
+        self.widget1.setMaximumWidth(300)
+        self.widget1.setMaximumHeight(1000)
+        self.widget1.resize(300, 800)
+        self.layout_widget1 = QVBoxLayout()
+        self.list_widget = QListWidget()
+        for index, serie in df.iterrows():
+            self.list_widget.addItem(str(df.loc[index, 'art'] + ": " + str(df.loc[index, 'artanz'])))
+        self.layout_widget1.addWidget(self.list_widget)
+        self.widget1.setLayout(self.layout_widget1)
+        self.widget1.show()
+
+        """wedges, labels, autocpt = plt.pie(df['artanz'], labels=df['art'], autopct='%1.1f%%', shadow=False, startangle=90)
+        fix_labels(autocpt, sepfactor=3)
+        fix_labels(labels, sepfactor=2)
+        # plt.text(-1.1,1.1, f'{list_of_small_numbers}', fontsize=10, va='top', wrap=True)
+        plt.show()"""
+
+        # 2nd try:
+
+        labels1 = df['art'].tolist()
+        labels2 = df_small['art'].tolist()
+        fig: plt.Figure
+        fig, (ax1, ax2) = plt.subplots(1, 2)
+        fig.suptitle(f"Zeigt alle Arten, die am {datetime.today().day}.{datetime.today().month} über die Jahre gefangen "
+                     f"wurden... \nlinks: anteilige Übersicht --- rechts: die links nicht mehr lesbaren Arten mit "
+                     f"n<{grenze_anzeige}")
+        values1 = df['artanz'].tolist()
+        values2 = df_small['artanz'].tolist()
+        l1 = ax1.pie(values1, startangle=90, autopct='%1.1f%%')
+        tot = sum(values2) / 100.0
+        autopct2 = lambda x: "%d" % round(x * tot)
+        l2 = ax2.pie(values2, startangle=90, autopct=autopct2)
+
+        for label, t in zip(labels1, l1[1]):
+            x, y = t.get_position()
+            angle = int(math.degrees(math.atan2(y, x)))
+            ha = "left"
+            if x < 0:
+                angle -= 180
+                ha = "right"
+            ax1.annotate(label, xy=(x, y), rotation=angle, ha=ha, va="center", rotation_mode="anchor", size=8)
+
+        for label, t in zip(labels2, l2[1]):
+            x, y = t.get_position()
+            angle = int(math.degrees(math.atan2(y, x)))
+            ha = "left"
+            if x < 0:
+                angle -= 180
+                ha = "right"
+            ax2.annotate(label, xy=(x, y), rotation=angle, ha=ha, va="center", rotation_mode="anchor", size=8)
+
+        # plt.text(-1.2, 1.2, f'Alle Arten mit weniger als {grenze_anzeige} Fängen: ', fontsize=10, va='top', wrap=True)
+        plt.show()
 
     def search(self):
         self.ui_search = _UiSearch()
@@ -4855,14 +4933,18 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tagebucheintrag_gui.exec_()
 
     def backup(self):
-        self.backup_window = Backup_GUI()
-        self.backup_window.getting_started()
         filename = self.__get_stylesheet_file()
+        self.backup_window = Backup_GUI()
         if filename:
             with open(filename, "r") as fh:
                 self.backup_window.setStyleSheet(fh.read())
-        result = self.backup_window.exec()
-        self.backup_window.done(result)
+
+        self.backup_worker = BackupThread()
+        self.backup_worker.message.connect(self.backup_window.add_message)
+        self.backup_worker.final_signal.connect(self.backup_window.own_func)
+        self.backup_worker.start()
+
+        self.backup_window.exec()
 
     # ############################################################################################################################
     # ALLES RUND UMS BILD
@@ -4917,23 +4999,18 @@ class MainWindow(QtWidgets.QMainWindow):
     def load_img(self, filepath: str = ''):
         if filepath == '':
             return
-
         self.img = QImage(filepath)
         self.pic = QGraphicsPixmapItem()
         self.pic.setPixmap(QPixmap.fromImage(self.img))
         self.scene.clear()
         self.scene.addItem(self.pic)
-        # openGLviewport = QOpenGLWidget()
-        # self.ui.GRA_view.setViewport(openGLviewport)
         self.ui.GRA_view.setScene(self.scene)
         self.ui.GRA_view.setRenderHints(QPainter.RenderHint.LosslessImageRendering |
                                         QPainter.RenderHint.HighQualityAntialiasing | QPainter.RenderHint.SmoothPixmapTransform)
-        # self.ui.GRA_view.setSceneRect(150, 150, 100, 100)
         self.fitInView(self.ui.GRA_view)
-        # self.ui.GRA_view.repaint()
         self._zoom = 0
 
-    def set_list_of_picture_paths_of_dir(self) -> (str, list):
+    def set_list_of_picture_paths_of_dir(self) -> tuple[str, list]:
         """
 
         :return:
@@ -5766,8 +5843,14 @@ class MainWindow(QtWidgets.QMainWindow):
 
             art_deutsch = self.ui.CMB_art.currentText()
             art_df_row = self.df_arten.query("deutsch == '" + art_deutsch + "'")
-            art_lat = art_df_row.at[art_df_row.index[0], 'lateinisch']
-            art_eng = art_df_row.at[art_df_row.index[0], 'englisch']
+            if not art_df_row.empty and 'lateinisch' in art_df_row.columns:
+                art_lat = art_df_row.iloc[0]['lateinisch']
+            else:
+                art_lat = None  # oder ein anderer Standardwert
+            if not art_df_row.empty and 'englisch' in art_df_row.columns:
+                art_eng = art_df_row.iloc[0]['englisch']
+            else:
+                art_eng = None  # oder ein anderer Standardwert
 
             self.ui.LBL_vogelnamen.setText(art_lat + ", " + art_eng)
             self.ui.LBL_vogelnamen.setStyleSheet("font: 10pt; font-style: italic;")
@@ -6033,7 +6116,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return False
         self.ui.CMB_zentrale.setCurrentText(str(df_zentrale['Name'].iloc[0]))
 
-    def get_ringnr_separated(self, rnr) -> (str, str, int):
+    def get_ringnr_separated(self, rnr) -> tuple[str, str, int]:
         if self:
             pass
         if len(rnr) > 0:
@@ -6532,7 +6615,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.ui.TBL_wiederfaenge.setRowCount(0)
             self.connect_all()
 
-    def get_defaults(self) -> pd.DataFrame | None:
+    def get_defaults(self) -> Optional[pd.DataFrame]:
         """
 
         :return:
@@ -6548,6 +6631,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if get_connection_status():
             with engine.connect() as conn_local:
                 return pd.read_sql_query(sa.text("SELECT * FROM defaults"), conn_local)
+        return None
 
     def changed(self, txt: str):
         if bd.get_debug():
